@@ -4,7 +4,7 @@ Architecture:
 Audio
 -> TranscriptionProvider (Groq Whisper / Stub)
 -> transcript
--> ExtractionProvider (Stub)
+-> ExtractionProvider (Gemini / Stub)
 -> untrusted suggested transaction
 -> Pydantic validation
 -> human review/edit
@@ -13,15 +13,18 @@ Audio
 """
 
 from datetime import date
+import json
 import os
 import re
-from typing import Any, Optional, Protocol
+from typing import Any, Literal, Optional, Protocol
 
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from app.schemas import Transaction, TransactionCategory
 
 MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB application limit
+
+DEFAULT_GEMINI_MODEL: str = "gemini-3.6-flash"
 
 SUPPORTED_AUDIO_MIME_TYPES = {
     "audio/webm",
@@ -45,6 +48,11 @@ class VoiceConfigurationError(Exception):
 
 class TranscriptionError(Exception):
     """Raised when upstream transcription service encounters an error."""
+    pass
+
+
+class ExtractionError(Exception):
+    """Raised when upstream structured extraction service encounters an error."""
     pass
 
 
@@ -193,6 +201,137 @@ class ExtractionProvider(Protocol):
         ...
 
 
+class GeminiTransactionExtraction(BaseModel):
+    """Pydantic schema for structured Gemini transaction extraction output.
+
+    Contains only the ledger-required transaction fields.
+    Zero PII fields, zero financial calculation fields.
+    """
+
+    date: Optional[str] = Field(
+        default=None,
+        description="Transaction date in YYYY-MM-DD format. If date is not specified in speech, use null or today's date.",
+    )
+    party_name: str = Field(
+        ...,
+        description="Customer or vendor party name. If genuinely unknown, use 'Unknown Party'.",
+    )
+    item: str = Field(
+        ...,
+        description="Item, work description, or service provided. If genuinely unknown, use 'General Item'.",
+    )
+    amount: float = Field(
+        ...,
+        description="Transaction amount in INR. Must be non-negative.",
+    )
+    tx_type: Literal["credit", "debit"] = Field(
+        ...,
+        description="'credit' for income/sales/payments received/loans received. 'debit' for payments made/purchases/wages/expenses/repayments/drawings.",
+    )
+    category: TransactionCategory = Field(
+        ...,
+        description=(
+            "One of: 'sales', 'raw_material', 'operating_expense', 'loan_disbursement', "
+            "'capital_injection', 'loan_repayment', 'personal_drawings', 'refund', 'other'."
+        ),
+    )
+
+
+class GeminiExtractionProvider:
+    """Real structured transaction extraction provider using Google GenAI SDK (Gemini).
+
+    Strictly server-side integration. The API key is read from GEMINI_API_KEY environment
+    variable or passed during initialization. Never hard-coded, never committed.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = DEFAULT_GEMINI_MODEL,
+        client: Optional[Any] = None,
+    ) -> None:
+        self.api_key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
+        if not self.api_key:
+            raise VoiceConfigurationError(
+                "GEMINI_API_KEY is not configured. Provide an API key or set GEMINI_API_KEY environment variable."
+            )
+        self.model = model
+        if client is not None:
+            self._client = client
+        else:
+            try:
+                from google import genai
+                self._client = genai.Client(api_key=self.api_key)
+            except ImportError as e:
+                raise VoiceConfigurationError(f"google-genai SDK is not installed: {e}") from e
+
+    def extract(self, transcript: str) -> dict[str, Any]:
+        """Extract structured transaction data from speech transcript using Gemini.
+
+        Input is ONLY the transcript text.
+        Never hallucinates missing facts.
+        Category is an AI suggestion only.
+        """
+        cleaned = transcript.strip()
+        if not cleaned:
+            raise ExtractionError("Transcript is empty")
+
+        today_str = date.today().isoformat()
+        prompt = (
+            f"You are an expert rural micro-enterprise accounting assistant in India.\n"
+            f"Extract the structured transaction from this voice transcript spoken in English, Hindi, or local dialect.\n\n"
+            f"Today's date is: {today_str}\n\n"
+            f"Transcript:\n\"{cleaned}\"\n\n"
+            f"Rules:\n"
+            f"1. Extract: date (YYYY-MM-DD), party_name, item, amount, tx_type ('credit' or 'debit'), and category.\n"
+            f"2. If date is not mentioned in speech, use today's date ({today_str}).\n"
+            f"3. Never invent missing business facts. If party or item is genuinely unknown, use 'Unknown Party' or 'General Item'.\n"
+            f"4. Category must be strictly one of: sales, raw_material, operating_expense, loan_disbursement, "
+            f"capital_injection, loan_repayment, personal_drawings, refund, other.\n"
+            f"5. Do not calculate turnover, working capital, or any financial metric.\n"
+            f"6. Do not extract or handle any Aadhaar, PAN, or sensitive identity documents."
+        )
+
+        try:
+            from google.genai import types
+
+            response = self._client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=GeminiTransactionExtraction,
+                    temperature=0.0,
+                ),
+            )
+        except Exception as err:
+            raise ExtractionError(f"Gemini extraction failed: {err}") from err
+
+        # Parse response (handle parsed object, text JSON, or dict)
+        raw_dict: dict[str, Any] = {}
+        if getattr(response, "parsed", None) is not None:
+            parsed = response.parsed
+            if isinstance(parsed, BaseModel):
+                raw_dict = parsed.model_dump()
+            elif isinstance(parsed, dict):
+                raw_dict = parsed
+
+        if not raw_dict and hasattr(response, "text") and response.text:
+            try:
+                raw_dict = json.loads(response.text)
+            except Exception as json_err:
+                raise ExtractionError(f"Failed to parse Gemini JSON output: {json_err}") from json_err
+
+        if not raw_dict:
+            raise ExtractionError("Gemini returned empty structured output")
+
+        # Fill date fallback if speaker did not provide date
+        if not raw_dict.get("date"):
+            raw_dict["date"] = date.today()
+
+        return raw_dict
+
+
 class StubExtractionProvider:
     """Stub extraction provider for testing interface contracts and UI confirmation flows.
 
@@ -309,6 +448,19 @@ class StubExtractionProvider:
             except ValueError:
                 pass
         return default
+
+
+def get_extraction_provider(api_key: Optional[str] = None) -> ExtractionProvider:
+    """Resolve active extraction provider based on environment configuration.
+
+    If GEMINI_API_KEY is present and non-empty, selects GeminiExtractionProvider.
+    If GEMINI_API_KEY is absent or empty, safely falls back to StubExtractionProvider.
+    Application startup NEVER fails merely because GEMINI_API_KEY is absent.
+    """
+    key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
+    if key:
+        return GeminiExtractionProvider(api_key=key)
+    return StubExtractionProvider()
 
 
 def validate_suggested_transaction(raw_dict: dict[str, Any]) -> Transaction:

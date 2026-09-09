@@ -14,10 +14,12 @@ from app.schemas import (
 )
 from app.voice_engine import (
     AudioValidationError,
+    ExtractionError,
     StubExtractionProvider,
     StubTranscriptionProvider,
     TranscriptionError,
     VoiceConfigurationError,
+    get_extraction_provider,
     get_transcription_provider,
     validate_suggested_transaction,
 )
@@ -42,7 +44,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-extraction_provider = StubExtractionProvider()
 
 
 @app.get("/health")
@@ -116,7 +117,20 @@ def extract_transaction(request: ExtractionRequest) -> VoiceExtractionResponse:
 
     GUARANTEE: Does NOT write to ledger state and does NOT call the finance engine.
     """
-    raw_suggestion = extraction_provider.extract(request.transcript)
+    provider = get_extraction_provider()
+    try:
+        raw_suggestion = provider.extract(request.transcript)
+    except VoiceConfigurationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Voice extraction configuration error: {e}",
+        )
+    except ExtractionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Upstream extraction error: {e}",
+        )
+
     try:
         validated_tx = validate_suggested_transaction(raw_suggestion)
     except ValidationError as e:
