@@ -1,4 +1,4 @@
-import type { FinanceCalculationRequest, FinancialSummary } from '../types';
+import type { FinanceCalculationRequest, FinancialSummary, OcrExtractionResponse } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
@@ -196,6 +196,64 @@ export async function extractVoiceTransaction(
     if (err instanceof ApiError) throw err;
     const message = err instanceof Error ? err.message : 'Unknown extraction error';
     throw new ApiError(`Failed to extract transaction from voice: ${message}`);
+  }
+}
+
+/**
+ * Extract structured transactions from a photograph of a handwritten slip, receipt, or bahi-khata.
+ * Calls POST /ocr/extract.
+ *
+ * NOTE: The returned suggestions are UNTRUSTED AI OUTPUT and require human verification.
+ */
+export async function extractOcrTransactions(
+  imageBase64: string,
+  mimeType = 'image/jpeg'
+): Promise<OcrExtractionResponse> {
+  const url = `${API_BASE_URL}/ocr/extract`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        image_base64: imageBase64,
+        mime_type: mimeType,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = `OCR extraction error (${response.status})`;
+      let detailMsg: string | null = null;
+      try {
+        const errJson = await response.json();
+        if (errJson?.detail) {
+          detailMsg = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+        }
+      } catch {
+        // non-json response
+      }
+
+      if (response.status === 422) {
+        errorMessage = detailMsg || 'The image could not be reliably read. Please review or enter manually.';
+      } else if (response.status === 502) {
+        errorMessage = 'AI service is temporarily unavailable. Please try again.';
+      } else if (detailMsg) {
+        errorMessage = detailMsg;
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+
+    return await response.json();
+  } catch (err: unknown) {
+    if (err instanceof ApiError) throw err;
+    const message = err instanceof Error ? err.message : 'Unknown network error';
+    throw new ApiError(
+      `Network Error: Failed to reach ArthSahayak OCR service (${message}). AI scanning requires an active connection.`,
+      0
+    );
   }
 }
 

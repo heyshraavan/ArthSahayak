@@ -118,3 +118,30 @@ class VoiceExtractionResponse(BaseModel):
     )
 
 
+class OcrExtractionRequest(BaseModel):
+    """Payload for handwritten ledger or photo OCR extraction."""
+
+    image_base64: str = Field(..., min_length=1, description="Base64-encoded image bytes")
+    mime_type: Optional[str] = Field(
+        default="image/jpeg",
+        description="MIME type of the image (e.g. image/jpeg, image/png, image/webp, image/heic)",
+    )
+
+
+class OcrExtractionResponse(BaseModel):
+    """Response containing untrusted AI suggested transactions extracted from an image."""
+
+    suggested_transactions: list[Transaction] = Field(
+        default_factory=list,
+        description="List of AI suggested transactions requiring human verification before adding to ledger",
+    )
+    raw_text: Optional[str] = Field(
+        default=None,
+        description="Brief transcription or detected text from the slip or ledger",
+    )
+    requires_confirmation: bool = Field(
+        default=True,
+        description="Guarantees explicit human confirmation before saving to ledger",
+    )
+
+

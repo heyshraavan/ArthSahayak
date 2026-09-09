@@ -9,8 +9,17 @@ from app.schemas import (
     ExtractionRequest,
     FinanceCalculationRequest,
     FinancialSummary,
+    OcrExtractionRequest,
+    OcrExtractionResponse,
     TranscriptionResponse,
     VoiceExtractionResponse,
+)
+from app.services.ocr import (
+    ImageValidationError,
+    OcrConfigurationError,
+    OcrError,
+    OcrValidationError,
+    get_ocr_provider,
 )
 from app.voice_engine import (
     AudioValidationError,
@@ -142,6 +151,72 @@ def extract_transaction(request: ExtractionRequest) -> VoiceExtractionResponse:
     return VoiceExtractionResponse(
         transcript=request.transcript,
         suggested_transaction=validated_tx,
+        requires_confirmation=True,
+    )
+
+
+@app.post("/ocr/extract", response_model=OcrExtractionResponse)
+def extract_ocr_transaction(request: OcrExtractionRequest) -> OcrExtractionResponse:
+    """Extract structured transaction suggestion from photo/scanned ledger document.
+
+    TREATS AI OUTPUT AS UNTRUSTED INPUT:
+    - Enforces 10 MB decoded image limit and validates image MIME types.
+    - Rejects identity documents (Aadhaar, PAN, caste certificates) with HTTP 422.
+    - Validates AI suggestion strictly via Pydantic Transaction model.
+    - Invalid categories, negative amounts, or malformed fields return HTTP 422.
+    - Upstream Gemini failures return HTTP 502 (never silently falls back to fake/stub data).
+    - GUARANTEE: Does NOT write to ledger state and does NOT call finance engine.
+    """
+    try:
+        image_bytes = base64.b64decode(request.image_base64, validate=True)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid base64 image data: {e}",
+        )
+
+    mime_type = request.mime_type or "image/jpeg"
+
+    provider = get_ocr_provider()
+    try:
+        raw_suggestion = provider.extract_from_image(image_bytes=image_bytes, mime_type=mime_type)
+    except ImageValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+    except OcrValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+    except OcrConfigurationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OCR configuration error: {e}",
+        )
+    except OcrError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Upstream OCR error: {e}",
+        )
+
+    raw_tx_list = raw_suggestion.get("transactions", [])
+
+    try:
+        validated_transactions = [
+            validate_suggested_transaction(tx)
+            for tx in raw_tx_list
+        ]
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"AI OCR extraction produced invalid transaction data: {e.errors()}",
+        )
+
+    return OcrExtractionResponse(
+        suggested_transactions=validated_transactions,
+        raw_text=raw_suggestion.get("raw_text"),
         requires_confirmation=True,
     )
 

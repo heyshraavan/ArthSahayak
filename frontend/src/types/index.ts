@@ -73,3 +73,11 @@ export interface VoiceExtractionResponse {
   requires_confirmation: boolean;
 }
 
+export type OcrUIState = 'idle' | 'image_selected' | 'processing' | 'extracted' | 'error';
+
+export interface OcrExtractionResponse {
+  suggested_transactions: BackendTransaction[];
+  raw_text?: string | null;
+  requires_confirmation: boolean;
+}
+

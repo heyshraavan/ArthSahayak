@@ -6,6 +6,8 @@ export interface CategoryInfo {
   labelHi: string;
   defaultType: TransactionType;
   badgeClass: string;
+  helperEn?: string;
+  helperHi?: string;
 }
 
 export const TRANSACTION_CATEGORIES: CategoryInfo[] = [
@@ -15,6 +17,8 @@ export const TRANSACTION_CATEGORIES: CategoryInfo[] = [
     labelHi: 'बिक्री / आमदनी (Sales)',
     defaultType: 'credit',
     badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    helperEn: 'Customer payments for products or services',
+    helperHi: 'उत्पाद या सेवाओं के लिए ग्राहकों से प्राप्त भुगतान',
   },
   {
     value: 'raw_material',
@@ -22,13 +26,17 @@ export const TRANSACTION_CATEGORIES: CategoryInfo[] = [
     labelHi: 'कच्चा माल खरीद (Raw Material)',
     defaultType: 'debit',
     badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+    helperEn: 'Supplies, inventory, stock & production materials',
+    helperHi: 'कच्चा माल, स्टॉक व उत्पादन सामग्री',
   },
   {
     value: 'operating_expense',
-    labelEn: 'Operating Expense / Wages',
-    labelHi: 'दैनिक खर्च / मजदूरी (OpEx)',
+    labelEn: 'Operating Expense',
+    labelHi: 'दैनिक / संचालन खर्च (OpEx)',
     defaultType: 'debit',
     badgeClass: 'bg-orange-50 text-orange-800 border-orange-200',
+    helperEn: 'Wages, food, travel, utilities & other business expenses',
+    helperHi: 'मजदूरी, भोजन, यात्रा, बिजली-पानी व अन्य व्यावसायिक खर्च',
   },
   {
     value: 'loan_disbursement',
