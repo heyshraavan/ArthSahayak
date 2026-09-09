@@ -40,3 +40,28 @@ class FinancialSummary(BaseModel):
     promoter_margin: float
     maximum_permissible_bank_finance: float
     dscr: Optional[float] = None
+
+
+class FinanceCalculationRequest(BaseModel):
+    """Request payload for deterministic financial calculation."""
+
+    transactions: list[Transaction] = Field(
+        default_factory=list,
+        description="List of informal ledger transactions",
+    )
+    explicit_turnover: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        description="Optional explicit turnover amount. Must be non-negative if provided.",
+    )
+    net_operating_income: float = Field(
+        ...,
+        ge=0.0,
+        description="Net operating income. Must be non-negative.",
+    )
+    debt_service: float = Field(
+        ...,
+        ge=0.0,
+        description="Total annual debt service obligations. Must be non-negative.",
+    )
+
