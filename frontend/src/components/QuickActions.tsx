@@ -32,7 +32,8 @@ import type {
 } from '../types';
 
 interface QuickActionsProps {
-  onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
+  onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void> | void;
+  onAddTransactions?: (txs: Omit<Transaction, 'id'>[]) => Promise<void> | void;
   language: 'en' | 'hi';
 }
 
@@ -50,8 +51,15 @@ export interface EditableOcrTransaction {
 const transcriptionProvider = new BackendTranscriptionProvider();
 const extractionProvider = new BackendExtractionProvider();
 
-export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, language }) => {
+export const QuickActions: React.FC<QuickActionsProps> = ({
+  onAddTransaction,
+  onAddTransactions,
+  language,
+}) => {
   const [activeModal, setActiveModal] = useState<'voice' | 'scan' | 'manual' | null>(null);
+
+  // Submission / saving lock to avoid duplicate transactions
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Manual & Voice entry two-step state
   const [step, setStep] = useState<'input' | 'review'>('input');
@@ -102,6 +110,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
   const resetManualForm = () => {
     // Stop any active audio recording
     stopAudioRecording(false);
+    setIsSaving(false);
     setStep('input');
     setDate(new Date().toISOString().split('T')[0]);
     setPartyName('');
@@ -221,7 +230,10 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
     setOcrTransactions(remaining);
   };
 
-  const handleConfirmAllOcrTransactions = () => {
+  const handleConfirmAllOcrTransactions = async () => {
+    if (ocrTransactions.length === 0) return;
+    if (isSaving) return;
+
     setFormError(null);
     let hasError = false;
 
@@ -254,19 +266,35 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
       return;
     }
 
-    // Add each confirmed transaction to the ledger
-    for (const tx of ocrTransactions) {
-      onAddTransaction({
+    setIsSaving(true);
+
+    try {
+      const confirmedTxs = ocrTransactions.map((tx) => ({
         date: tx.date.trim(),
         party_name: tx.party_name.trim(),
         item: tx.item.trim(),
         amount: parseFloat(tx.amount),
         tx_type: tx.tx_type,
         category: tx.category,
-      });
-    }
+      }));
 
-    resetManualForm();
+      // Atomic batch addition: write to IndexedDB in one transaction and update state once
+      if (onAddTransactions) {
+        await onAddTransactions(confirmedTxs);
+      } else {
+        for (const tx of confirmedTxs) {
+          await onAddTransaction(tx);
+        }
+      }
+
+      resetManualForm();
+    } catch (err: unknown) {
+      console.error('Failed to save OCR batch:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to save confirmed transactions';
+      setFormError(language === 'hi' ? `सहेजने में त्रुटि: ${msg}` : `Failed to save transactions: ${msg}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const startAudioRecording = async () => {
@@ -420,21 +448,33 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
     setStep('review');
   };
 
-  const handleConfirmAndAdd = () => {
+  const handleConfirmAndAdd = async () => {
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) return;
+    if (isSaving) return;
 
-    // Guaranteed Human Confirmation: Only explicit user click invokes onAddTransaction
-    onAddTransaction({
-      date: date.trim(),
-      party_name: partyName.trim(),
-      item: item.trim(),
-      amount: numAmount,
-      tx_type: txType,
-      category: category,
-    });
+    setIsSaving(true);
+    setFormError(null);
 
-    resetManualForm();
+    try {
+      // Guaranteed Human Confirmation: Only explicit user click invokes onAddTransaction
+      await onAddTransaction({
+        date: date.trim(),
+        party_name: partyName.trim(),
+        item: item.trim(),
+        amount: numAmount,
+        tx_type: txType,
+        category: category,
+      });
+
+      resetManualForm();
+    } catch (err: unknown) {
+      console.error('Failed to add transaction:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to save transaction';
+      setFormError(language === 'hi' ? `सहेजने में त्रुटि: ${msg}` : `Failed to save transaction: ${msg}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const selectedCategoryInfo = getCategoryInfo(category);
@@ -1009,17 +1049,25 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
                 <div className="grid grid-cols-2 gap-2.5 pt-1">
                   <button
                     type="button"
+                    disabled={isSaving}
                     onClick={() => setStep('input')}
-                    className="min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                    className={`min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs transition-colors ${
+                      isSaving ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer'
+                    }`}
                   >
                     {language === 'hi' ? '← विवरण सुधारें' : '← Edit Details'}
                   </button>
                   <button
                     type="button"
+                    disabled={isSaving}
                     onClick={handleConfirmAndAdd}
-                    className="min-h-[46px] py-2.5 px-3 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-md hover:bg-emerald-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600"
+                    className={`min-h-[46px] py-2.5 px-3 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600 ${
+                      isSaving ? 'opacity-60 cursor-not-allowed bg-emerald-800' : 'hover:bg-emerald-800 cursor-pointer'
+                    }`}
                   >
-                    {language === 'hi' ? 'पुष्टि करें और जोड़ें ✓' : 'Confirm & Save ✓'}
+                    {isSaving
+                      ? (language === 'hi' ? 'सहेजा जा रहा है...' : 'Saving...')
+                      : (language === 'hi' ? 'पुष्टि करें और जोड़ें ✓' : 'Confirm & Save ✓')}
                   </button>
                 </div>
               </div>
@@ -1419,6 +1467,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
                     <div className="grid grid-cols-2 gap-2.5 pt-1">
                       <button
                         type="button"
+                        disabled={isSaving}
                         onClick={() => {
                           setOcrState('idle');
                           setOcrImageFile(null);
@@ -1426,18 +1475,25 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
                           setOcrImageBase64(null);
                           setOcrTransactions([]);
                         }}
-                        className="min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                        className={`min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs transition-colors ${
+                          isSaving ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer'
+                        }`}
                       >
                         {language === 'hi' ? '← नई तस्वीर लें' : '← Retake Photo'}
                       </button>
                       <button
                         type="button"
+                        disabled={isSaving}
                         onClick={handleConfirmAllOcrTransactions}
-                        className="min-h-[46px] py-2.5 px-3 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-md hover:bg-emerald-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600"
+                        className={`min-h-[46px] py-2.5 px-3 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600 ${
+                          isSaving ? 'opacity-60 cursor-not-allowed bg-emerald-800' : 'hover:bg-emerald-800 cursor-pointer'
+                        }`}
                       >
-                        {language === 'hi'
-                          ? `पुष्टि करें (${ocrTransactions.length}) ✓`
-                          : `Confirm All (${ocrTransactions.length}) ✓`}
+                        {isSaving
+                          ? (language === 'hi' ? 'लेनदेन सहेजे जा रहे हैं...' : 'Saving transactions...')
+                          : (language === 'hi'
+                              ? `पुष्टि करें (${ocrTransactions.length}) ✓`
+                              : `Confirm All (${ocrTransactions.length}) ✓`)}
                       </button>
                     </div>
                   </div>

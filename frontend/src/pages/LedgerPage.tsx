@@ -6,11 +6,17 @@ import type { Transaction } from '../types';
 
 interface LedgerPageProps {
   transactions: Transaction[];
-  onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
+  onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void> | void;
+  onAddTransactions?: (txs: Omit<Transaction, 'id'>[]) => Promise<void> | void;
   language: 'en' | 'hi';
 }
 
-export const LedgerPage: React.FC<LedgerPageProps> = ({ transactions, onAddTransaction, language }) => {
+export const LedgerPage: React.FC<LedgerPageProps> = ({
+  transactions,
+  onAddTransaction,
+  onAddTransactions,
+  language,
+}) => {
   return (
     <div className="space-y-4">
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
@@ -24,7 +30,11 @@ export const LedgerPage: React.FC<LedgerPageProps> = ({ transactions, onAddTrans
         </p>
       </div>
 
-      <QuickActions onAddTransaction={onAddTransaction} language={language} />
+      <QuickActions
+        onAddTransaction={onAddTransaction}
+        onAddTransactions={onAddTransactions}
+        language={language}
+      />
 
       <RecentTransactions transactions={transactions} language={language} />
     </div>

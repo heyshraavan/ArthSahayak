@@ -20,7 +20,8 @@ interface DashboardPageProps {
   onRetryCalculation: () => void;
   onUseDemoFallback?: () => void;
   transactions: Transaction[];
-  onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
+  onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void> | void;
+  onAddTransactions?: (txs: Omit<Transaction, 'id'>[]) => Promise<void> | void;
   language: 'en' | 'hi';
 }
 
@@ -34,6 +35,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onUseDemoFallback,
   transactions,
   onAddTransaction,
+  onAddTransactions,
   language,
 }) => {
   return (
@@ -71,7 +73,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       </section>
 
       {/* Primary Actions: Speak, Scan Chit, Add Manual */}
-      <QuickActions onAddTransaction={onAddTransaction} language={language} />
+      <QuickActions
+        onAddTransaction={onAddTransaction}
+        onAddTransactions={onAddTransactions}
+        language={language}
+      />
 
       {/* Financial Health Metrics (API-driven / Loading / Error / Verified Engine Indicator) */}
       <FinancialMetricCards
