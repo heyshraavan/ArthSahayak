@@ -5,16 +5,20 @@ from pydantic import ValidationError
 from app.finance_engine import (
     DSCR,
     assess_working_capital,
+    calculated_operating_surplus,
     compute_financial_summary,
     maximum_permissible_bank_finance,
     net_cash_flow,
+    operating_costs,
+    operating_revenue,
     promoter_margin,
     total_credit,
     total_debit,
     turnover,
     working_capital_requirement,
 )
-from app.schemas import Transaction
+from app.schemas import Transaction, TransactionCategory
+
 
 
 def test_normal_transactions():
@@ -189,3 +193,111 @@ def test_compute_financial_summary():
     assert summary_with_dscr.promoter_margin == 5_000.0
     assert summary_with_dscr.maximum_permissible_bank_finance == 20_000.0
     assert summary_with_dscr.dscr == 2.0
+
+
+def test_categorized_turnover_excludes_loans_and_capital_injections():
+    """Verify that categorized turnover includes only sales, excluding loans and equity."""
+    txs = [
+        Transaction(date=date(2026, 9, 1), party_name="Customer A", item="Chair", amount=40_000.0, tx_type="credit", category="sales"),
+        Transaction(date=date(2026, 9, 2), party_name="Rural Bank", item="Loan Disbursement", amount=50_000.0, tx_type="credit", category="loan_disbursement"),
+        Transaction(date=date(2026, 9, 3), party_name="Owner", item="Personal Savings", amount=10_000.0, tx_type="credit", category="capital_injection"),
+    ]
+    # Total credit should be the full cash inflow (100k)
+    assert total_credit(txs) == 100_000.0
+    # Turnover must strictly isolate sales (40k)
+    assert turnover(txs) == 40_000.0
+    assert operating_revenue(txs) == 40_000.0
+
+
+def test_legacy_uncategorized_turnover_fallback():
+    """Verify that when all transactions have category=None, turnover falls back to total_credit."""
+    txs = [
+        Transaction(date=date(2026, 9, 1), party_name="Customer A", item="Table", amount=15_000.0, tx_type="credit", category=None),
+        Transaction(date=date(2026, 9, 2), party_name="Customer B", item="Desk", amount=10_000.0, tx_type="credit", category=None),
+    ]
+    assert total_credit(txs) == 25_000.0
+    assert turnover(txs) == 25_000.0
+
+
+def test_distinction_between_zero_categorized_sales_and_legacy_uncategorized():
+    """Verify zero categorized sales evaluates to 0 turnover, unlike legacy fallback."""
+    # Case A: Categorized dataset with NO sales (e.g. only loan received)
+    categorized_no_sales = [
+        Transaction(date=date(2026, 9, 1), party_name="Bank", item="MFI Loan", amount=50_000.0, tx_type="credit", category="loan_disbursement"),
+    ]
+    assert total_credit(categorized_no_sales) == 50_000.0
+    # Must evaluate to 0.0, NOT falling back to total_credit
+    assert turnover(categorized_no_sales) == 0.0
+
+    # Case B: Legacy uncategorized dataset with identical amount
+    legacy_txs = [
+        Transaction(date=date(2026, 9, 1), party_name="Bank", item="MFI Loan", amount=50_000.0, tx_type="credit", category=None),
+    ]
+    assert total_credit(legacy_txs) == 50_000.0
+    # Falls back to total_credit in legacy mode
+    assert turnover(legacy_txs) == 50_000.0
+
+
+def test_operating_surplus_calculation():
+    """Verify operating_revenue, operating_costs, and calculated_operating_surplus."""
+    txs = [
+        Transaction(date=date(2026, 9, 1), party_name="Client", item="Furniture Sale", amount=80_000.0, tx_type="credit", category="sales"),
+        Transaction(date=date(2026, 9, 2), party_name="Timber Depot", item="Teak Planks", amount=30_000.0, tx_type="debit", category="raw_material"),
+        Transaction(date=date(2026, 9, 3), party_name="Workshop Landlord", item="Monthly Rent", amount=15_000.0, tx_type="debit", category="operating_expense"),
+    ]
+    assert operating_revenue(txs) == 80_000.0
+    assert operating_costs(txs) == 45_000.0
+    assert calculated_operating_surplus(txs) == 35_000.0
+
+
+def test_loan_repayment_and_personal_drawings_excluded_from_operating_costs():
+    """Verify financing debt service and equity drawings do not enter operating costs."""
+    txs = [
+        Transaction(date=date(2026, 9, 1), party_name="Timber Mill", item="Wood", amount=20_000.0, tx_type="debit", category="raw_material"),
+        Transaction(date=date(2026, 9, 2), party_name="Electricity Board", item="Power", amount=5_000.0, tx_type="debit", category="operating_expense"),
+        Transaction(date=date(2026, 9, 3), party_name="Bank", item="Loan EMI", amount=10_000.0, tx_type="debit", category="loan_repayment"),
+        Transaction(date=date(2026, 9, 4), party_name="Owner Household", item="Household Expenses", amount=8_000.0, tx_type="debit", category="personal_drawings"),
+    ]
+    # Total debit is 43,000
+    assert total_debit(txs) == 43_000.0
+    # Operating costs must strictly include ONLY raw_material (20k) + operating_expense (5k) = 25,000
+    assert operating_costs(txs) == 25_000.0
+
+
+def test_invalid_category_rejected():
+    """Verify that invalid category strings are rejected by Pydantic."""
+    with pytest.raises(ValidationError):
+        Transaction(
+            date=date(2026, 9, 1),
+            party_name="Party",
+            item="Item",
+            amount=100.0,
+            tx_type="credit",
+            category="invalid_category",  # type: ignore
+        )
+
+
+def test_all_valid_categories_accepted():
+    """Verify that all 9 valid TransactionCategory literals are accepted."""
+    valid_categories = [
+        "sales",
+        "raw_material",
+        "operating_expense",
+        "loan_disbursement",
+        "capital_injection",
+        "loan_repayment",
+        "personal_drawings",
+        "refund",
+        "other",
+    ]
+    for cat in valid_categories:
+        tx = Transaction(
+            date=date(2026, 9, 1),
+            party_name="Test Party",
+            item="Test Item",
+            amount=100.0,
+            tx_type="credit",
+            category=cat,  # type: ignore
+        )
+        assert tx.category == cat
+

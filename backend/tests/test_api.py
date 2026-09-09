@@ -236,3 +236,85 @@ def test_malformed_request_body():
         json={"transactions": "not-a-list", "net_operating_income": "abc", "debt_service": "xyz"},
     )
     assert response.status_code == 422
+
+
+def test_api_with_categorized_transactions():
+    """Verify POST /finance/calculate correctly processes categorized transactions."""
+    payload = {
+        "transactions": [
+            {
+                "date": "2026-09-01",
+                "party_name": "Ramesh Carpenter",
+                "item": "Dining Table",
+                "amount": 40000.0,
+                "tx_type": "credit",
+                "category": "sales",
+            },
+            {
+                "date": "2026-09-02",
+                "party_name": "Gramin Bank",
+                "item": "MUDRA Loan Credit",
+                "amount": 50000.0,
+                "tx_type": "credit",
+                "category": "loan_disbursement",
+            },
+            {
+                "date": "2026-09-03",
+                "party_name": "Timber Depot",
+                "item": "Teak Wood",
+                "amount": 10000.0,
+                "tx_type": "debit",
+                "category": "raw_material",
+            },
+            {
+                "date": "2026-09-04",
+                "party_name": "Household Cash",
+                "item": "Personal Groceries",
+                "amount": 5000.0,
+                "tx_type": "debit",
+                "category": "personal_drawings",
+            },
+        ],
+        "net_operating_income": 20000.0,
+        "debt_service": 10000.0,
+    }
+    response = client.post("/finance/calculate", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    # Cash flows
+    assert data["total_credit"] == 90000.0
+    assert data["total_debit"] == 15000.0
+    assert data["net_cash_flow"] == 75000.0
+
+    # Categorized turnover must strictly isolate sales (40k) and exclude the 50k loan
+    assert data["turnover"] == 40000.0
+    assert data["working_capital_requirement"] == 10000.0  # 25% of 40k
+    assert data["promoter_margin"] == 2000.0              # 5% of 40k
+    assert data["maximum_permissible_bank_finance"] == 8000.0  # 20% of 40k
+    assert data["dscr"] == 2.0
+
+
+def test_legacy_api_payload_without_category_still_works():
+    """Verify legacy payloads omitting the category field continue to work without regression."""
+    payload = {
+        "transactions": [
+            {
+                "date": "2026-09-01",
+                "party_name": "Customer",
+                "item": "Work",
+                "amount": 30000.0,
+                "tx_type": "credit",
+            }
+        ],
+        "net_operating_income": 15000.0,
+        "debt_service": 7500.0,
+    }
+    response = client.post("/finance/calculate", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["turnover"] == 30000.0
+    assert data["working_capital_requirement"] == 7500.0
+    assert data["promoter_margin"] == 1500.0
+    assert data["maximum_permissible_bank_finance"] == 6000.0
+

@@ -3,6 +3,19 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
+TransactionCategory = Literal[
+    "sales",
+    "raw_material",
+    "operating_expense",
+    "loan_disbursement",
+    "capital_injection",
+    "loan_repayment",
+    "personal_drawings",
+    "refund",
+    "other",
+]
+
+
 class Transaction(BaseModel):
     """Represents a single financial transaction in the prototype ledger."""
 
@@ -11,6 +24,10 @@ class Transaction(BaseModel):
     item: str = Field(..., min_length=1, description="Description of goods or service")
     amount: float = Field(..., ge=0.0, description="Non-negative transaction amount")
     tx_type: Literal["credit", "debit"]
+    category: Optional[TransactionCategory] = Field(
+        default=None,
+        description="Deterministic transaction category for revenue/expense segregation",
+    )
 
     @field_validator("party_name", "item")
     @classmethod
@@ -18,6 +35,7 @@ class Transaction(BaseModel):
         if not v.strip():
             raise ValueError("String field must not be empty or whitespace-only")
         return v.strip()
+
 
 
 class WorkingCapitalAssessment(BaseModel):

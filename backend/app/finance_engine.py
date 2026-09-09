@@ -42,20 +42,61 @@ def net_cash_flow(transactions: Sequence[Transaction]) -> float:
     return round(total_credit(transactions) - total_debit(transactions), 2)
 
 
+def operating_revenue(transactions: Sequence[Transaction]) -> float:
+    """Calculate operating revenue as the sum of transactions categorized as 'sales'."""
+    return round(sum(tx.amount for tx in transactions if tx.category == "sales"), 2)
+
+
+def operating_costs(transactions: Sequence[Transaction]) -> float:
+    """Calculate operating costs as direct raw materials plus operating expenses.
+
+    Note: Loan repayments (financing debt service) and personal drawings (owner equity withdrawals)
+    are strictly excluded from operating costs.
+    """
+    return round(
+        sum(tx.amount for tx in transactions if tx.category in ("raw_material", "operating_expense")),
+        2,
+    )
+
+
+def calculated_operating_surplus(transactions: Sequence[Transaction]) -> float:
+    """Calculate prototype operating surplus: operating_revenue - operating_costs.
+
+    Accounting Notice:
+    This is a prototype operational cash generation surplus (revenue minus direct material and opex).
+    It is not yet a statutory bank-accounting Net Operating Income (NOI) definition, which requires
+    formal depreciation, tax accruals, and interest expense separation.
+    """
+    return round(operating_revenue(transactions) - operating_costs(transactions), 2)
+
+
 def turnover(
     transactions: Sequence[Transaction],
     explicit_turnover: Optional[float] = None,
 ) -> float:
     """Determine turnover for financial calculations.
 
-    If explicit_turnover is provided, it is validated and used directly.
-    Otherwise, total_credit is used as the transactional inflow proxy.
+    Hierarchy of evaluation:
+    1. Explicit turnover takes highest priority: if explicit_turnover is provided, it is
+       validated (>= 0) and used directly.
+    2. Categorized transactions: if at least one transaction in the dataset has a category
+       specified (category is not None), turnover evaluates strictly to operating_revenue
+       (the sum of transactions categorized as 'sales'). Non-sales inflows (loans, equity, etc.)
+       and uncategorized entries are excluded; if there are no 'sales', turnover evaluates to 0.0.
+    3. Legacy uncategorized fallback: if ALL transactions in the dataset have category=None
+       (or transactions list is empty), preserves the legacy prototype fallback of total_credit(transactions).
     """
     if explicit_turnover is not None:
         if explicit_turnover < 0:
             raise ValueError("Turnover cannot be negative")
         return round(float(explicit_turnover), 2)
+
+    has_categorized = any(tx.category is not None for tx in transactions)
+    if has_categorized:
+        return operating_revenue(transactions)
+
     return total_credit(transactions)
+
 
 
 def working_capital_requirement(turnover_amount: float) -> float:
