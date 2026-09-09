@@ -1,14 +1,29 @@
 import React from 'react';
-import { CheckCircle2, Download, FileText, Landmark, ShieldCheck } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, FileText, Landmark, ShieldCheck } from 'lucide-react';
 import type { FinancialSummary } from '../types';
 
-
 interface AppraisalPageProps {
-  financialSummary: FinancialSummary;
+  financialSummary: FinancialSummary | null;
   language: 'en' | 'hi';
 }
 
 export const AppraisalPage: React.FC<AppraisalPageProps> = ({ financialSummary, language }) => {
+  if (!financialSummary) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl p-6 text-center space-y-3">
+        <AlertCircle className="w-8 h-8 text-amber-600 mx-auto" />
+        <h2 className="text-sm font-bold text-slate-900">
+          {language === 'hi' ? 'मूल्यांकन डेटा अनुपलब्ध' : 'Appraisal Metrics Unavailable'}
+        </h2>
+        <p className="text-xs text-slate-500">
+          {language === 'hi'
+            ? 'बैकएंड वित्त इंजन से वित्तीय आंकड़े प्राप्त होने के बाद बैंक डॉसियर तैयार होगा।'
+            : 'Bank dossier structuring requires active calculation from the ArthSahayak Finance Engine.'}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Overview Banner */}

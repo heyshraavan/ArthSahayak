@@ -9,6 +9,21 @@ export interface Transaction {
   tx_type: TransactionType;
 }
 
+export interface BackendTransaction {
+  date: string;
+  party_name: string;
+  item: string;
+  amount: number;
+  tx_type: TransactionType;
+}
+
+export interface FinanceCalculationRequest {
+  transactions: BackendTransaction[];
+  explicit_turnover?: number | null;
+  net_operating_income: number;
+  debt_service: number;
+}
+
 export interface FinancialSummary {
   total_credit: number;
   total_debit: number;
@@ -28,3 +43,6 @@ export interface EntrepreneurProfile {
 }
 
 export type NavigationTab = 'dashboard' | 'ledger' | 'appraisal' | 'schemes';
+
+export type CalculationStatus = 'loading' | 'success' | 'error' | 'demo';
+export type CalculationDataSource = 'backend' | 'demo' | null;

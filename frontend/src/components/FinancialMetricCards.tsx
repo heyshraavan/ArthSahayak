@@ -1,11 +1,24 @@
 import React from 'react';
-import { AlertCircle, ArrowDownRight, ArrowUpRight, CheckCircle2, ShieldCheck, TrendingUp } from 'lucide-react';
-import type { FinancialSummary } from '../types';
-
+import {
+  AlertCircle,
+  ArrowDownRight,
+  ArrowUpRight,
+  CheckCircle2,
+  Loader2,
+  RefreshCw,
+  Server,
+  ShieldCheck,
+  TrendingUp,
+} from 'lucide-react';
+import type { CalculationDataSource, CalculationStatus, FinancialSummary } from '../types';
 
 interface FinancialMetricCardsProps {
-  summary: FinancialSummary;
-  isMockData?: boolean;
+  summary: FinancialSummary | null;
+  status: CalculationStatus;
+  dataSource: CalculationDataSource;
+  errorMessage?: string | null;
+  onRetry?: () => void;
+  onUseDemoFallback?: () => void;
   language: 'en' | 'hi';
 }
 
@@ -15,21 +28,122 @@ const formatCurrency = (val: number): string => {
 
 export const FinancialMetricCards: React.FC<FinancialMetricCardsProps> = ({
   summary,
-  isMockData = true,
+  status,
+  dataSource,
+  errorMessage,
+  onRetry,
+  onUseDemoFallback,
   language,
 }) => {
+  // 1. Loading State
+  if (status === 'loading') {
+    return (
+      <section
+        className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs text-center space-y-3"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-900 flex items-center justify-center mx-auto">
+          <Loader2 className="w-6 h-6 animate-spin text-blue-900" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-sm font-bold text-slate-900">
+            {language === 'hi'
+              ? 'अर्थसहायक वित्त इंजन द्वारा गणना जारी है...'
+              : 'Connecting to ArthSahayak Finance Engine...'}
+          </h3>
+          <p className="text-xs text-slate-500">
+            {language === 'hi'
+              ? 'बही-खाता लेनदेन और नायक समिति कार्यशील पूंजी अनुपात का मूल्यांकन हो रहा है।'
+              : 'Deterministically evaluating ledger cash flows and Nayak Committee norms.'}
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  // 2. Error State (NEVER show fake numbers on error)
+  if (status === 'error' || !summary) {
+    return (
+      <section
+        className="bg-rose-50/70 border-2 border-rose-200 rounded-xl p-4 shadow-xs space-y-3"
+        role="alert"
+        aria-labelledby="api-error-heading"
+      >
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-rose-100 text-rose-700 shrink-0 mt-0.5">
+            <AlertCircle className="w-5 h-5" aria-hidden="true" />
+          </div>
+          <div className="space-y-1 flex-1">
+            <h3 id="api-error-heading" className="text-sm font-bold text-rose-950">
+              {language === 'hi' ? 'बैकएंड वित्त इंजन से संपर्क विफल' : 'Finance Engine Connection Failed'}
+            </h3>
+            <p className="text-xs text-rose-800 leading-relaxed">
+              {errorMessage ||
+                (language === 'hi'
+                  ? 'FastAPI सर्वर से गणना प्राप्त नहीं हो सकी। कृपया सुनिश्चित करें कि बैकएंड http://127.0.0.1:8000 पर चल रहा है।'
+                  : 'Unable to calculate metrics from FastAPI backend. Ensure backend is running at http://127.0.0.1:8000.')}
+            </p>
+            <p className="text-[11px] font-semibold text-rose-900 pt-0.5">
+              {language === 'hi'
+                ? 'सुरक्षा नियम: विफलता के बाद अमान्य/नकली वित्तीय आंकड़े प्रदर्शित नहीं किए जा रहे हैं।'
+                : 'Safety Guardrail: Failed requests are not replaced with silent fallback numbers.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-200">
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-rose-700 text-white text-xs font-bold shadow-xs hover:bg-rose-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-600 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>{language === 'hi' ? 'पुनः प्रयास करें (Retry)' : 'Retry Connection'}</span>
+            </button>
+          )}
+
+          {onUseDemoFallback && (
+            <button
+              type="button"
+              onClick={onUseDemoFallback}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-rose-300 text-rose-900 text-xs font-semibold hover:bg-rose-50 cursor-pointer"
+            >
+              <span>{language === 'hi' ? 'ऑफ़लाइन डेमो देखें (Demo Only)' : 'View Static Demo Preview'}</span>
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  // 3. Render Metric Cards
   const isSurplus = summary.net_cash_flow >= 0;
+  const isBackendData = dataSource === 'backend';
 
   return (
     <section className="space-y-3" aria-labelledby="financial-metrics-heading">
-      <div className="flex items-center justify-between">
+      {/* Header and Provenance Badge */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 id="financial-metrics-heading" className="text-sm font-bold text-slate-900 uppercase tracking-wider">
           {language === 'hi' ? 'वित्तीय स्थिति सारांश' : 'Financial Health Snapshot'}
         </h2>
-        {isMockData && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">
+
+        {/* Real Backend Data Indicator */}
+        {isBackendData ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+            <Server className="w-3 h-3 text-emerald-700" aria-hidden="true" />
+            <span>
+              {language === 'hi'
+                ? 'अर्थसहायक वित्त इंजन द्वारा सत्यापित'
+                : 'Calculated by ArthSahayak Finance Engine'}
+            </span>
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full">
             <AlertCircle className="w-3 h-3 text-amber-700" aria-hidden="true" />
-            {language === 'hi' ? 'डेमो डेटा (प्रोटोटाइप)' : 'Demo Data (Prototype)'}
+            <span>{language === 'hi' ? 'डेमो डेटा (Not from Backend)' : 'DEMO DATA (Offline Fallback)'}</span>
           </span>
         )}
       </div>
@@ -46,8 +160,8 @@ export const FinancialMetricCards: React.FC<FinancialMetricCardsProps> = ({
             </p>
             <p className="text-xs text-slate-600 mt-0.5">
               {isSurplus
-                ? (language === 'hi' ? 'संचालन में नकदी बचत (Surplus)' : 'Operational cash surplus in period')
-                : (language === 'hi' ? 'नकदी कमी (Cash deficit)' : 'Operational cash deficit in period')}
+                ? (language === 'hi' ? 'संचालन में शुद्ध नकदी बचत (Surplus)' : 'Operational cash surplus in period')
+                : (language === 'hi' ? 'नकदी घाटा (Cash deficit)' : 'Operational cash deficit in period')}
             </p>
           </div>
           <div className={`p-2.5 rounded-xl ${isSurplus ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
@@ -92,6 +206,7 @@ export const FinancialMetricCards: React.FC<FinancialMetricCardsProps> = ({
           </span>
         </div>
 
+        {/* Highlighted MPBF recommendation */}
         <div className="mt-3 bg-blue-50/70 border border-blue-200 rounded-lg p-3">
           <p className="text-xs text-blue-900 font-medium">
             {language === 'hi' ? 'अधिकतम अनुमेय बैंक ऋण (MPBF - 20%)' : 'Maximum Permissible Bank Finance (MPBF)'}
@@ -111,10 +226,11 @@ export const FinancialMetricCards: React.FC<FinancialMetricCardsProps> = ({
           </p>
         </div>
 
+        {/* 25% WCR and 5% Margin breakdown */}
         <div className="grid grid-cols-2 gap-2 mt-2.5">
           <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50">
             <p className="text-[11px] text-slate-600 font-medium">
-              {language === 'hi' ? 'कार्यशील पूंजी आवश्यकता (25%)' : 'Working Capital Req. (25%)'}
+              {language === 'hi' ? 'कार्यशील पूंजी जरूरत (25%)' : 'Working Capital Req. (25%)'}
             </p>
             <p className="text-sm font-bold text-slate-900 mt-0.5">
               {formatCurrency(summary.working_capital_requirement)}

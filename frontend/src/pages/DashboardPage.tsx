@@ -3,12 +3,22 @@ import { Briefcase, MapPin } from 'lucide-react';
 import { FinancialMetricCards } from '../components/FinancialMetricCards';
 import { QuickActions } from '../components/QuickActions';
 import { RecentTransactions } from '../components/RecentTransactions';
-import type { EntrepreneurProfile, FinancialSummary, Transaction } from '../types';
-
+import type {
+  CalculationDataSource,
+  CalculationStatus,
+  EntrepreneurProfile,
+  FinancialSummary,
+  Transaction,
+} from '../types';
 
 interface DashboardPageProps {
   profile: EntrepreneurProfile;
-  financialSummary: FinancialSummary;
+  financialSummary: FinancialSummary | null;
+  calculationStatus: CalculationStatus;
+  dataSource: CalculationDataSource;
+  errorMessage?: string | null;
+  onRetryCalculation: () => void;
+  onUseDemoFallback?: () => void;
   transactions: Transaction[];
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
   language: 'en' | 'hi';
@@ -17,6 +27,11 @@ interface DashboardPageProps {
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   profile,
   financialSummary,
+  calculationStatus,
+  dataSource,
+  errorMessage,
+  onRetryCalculation,
+  onUseDemoFallback,
   transactions,
   onAddTransaction,
   language,
@@ -58,8 +73,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       {/* Primary Actions: Speak, Scan Chit, Add Manual */}
       <QuickActions onAddTransaction={onAddTransaction} language={language} />
 
-      {/* Financial Health Metrics */}
-      <FinancialMetricCards summary={financialSummary} isMockData={true} language={language} />
+      {/* Financial Health Metrics (API-driven / Loading / Error / Verified Engine Indicator) */}
+      <FinancialMetricCards
+        summary={financialSummary}
+        status={calculationStatus}
+        dataSource={dataSource}
+        errorMessage={errorMessage}
+        onRetry={onRetryCalculation}
+        onUseDemoFallback={onUseDemoFallback}
+        language={language}
+      />
 
       {/* Recent Transactions List */}
       <RecentTransactions transactions={transactions} language={language} />
