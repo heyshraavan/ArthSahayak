@@ -49,6 +49,7 @@ export function App() {
         item: tx.item,
         amount: tx.amount,
         tx_type: tx.tx_type,
+        category: tx.category ?? null,
       })),
       explicit_turnover: null,
       net_operating_income: 20000.0,
@@ -74,7 +75,8 @@ export function App() {
   // Initial calculation on application mount
   useEffect(() => {
     fetchBackendCalculation(transactions);
-  }, [fetchBackendCalculation, transactions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchBackendCalculation]);
 
   // Handle manual / voice / scan addition of a new transaction
   const handleAddTransaction = (newTxData: Omit<Transaction, 'id'>) => {

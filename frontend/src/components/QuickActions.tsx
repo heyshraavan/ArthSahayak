@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Camera, Mic, Plus, X } from 'lucide-react';
-import type { Transaction } from '../types';
-
+import { ArrowDownRight, ArrowUpRight, Calendar, Camera, CheckCircle2, ChevronLeft, Mic, Plus, Tag, User, Utensils, X } from 'lucide-react';
+import { getCategoryInfo, TRANSACTION_CATEGORIES } from '../lib/categories';
+import type { Transaction, TransactionCategory, TransactionType } from '../types';
 
 interface QuickActionsProps {
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
@@ -11,33 +11,72 @@ interface QuickActionsProps {
 export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, language }) => {
   const [activeModal, setActiveModal] = useState<'voice' | 'scan' | 'manual' | null>(null);
 
-  // Simple form state for manual entry
+  // Manual entry two-step state
+  const [step, setStep] = useState<'input' | 'review'>('input');
+  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [partyName, setPartyName] = useState('');
   const [item, setItem] = useState('');
   const [amount, setAmount] = useState('');
-  const [txType, setTxType] = useState<'credit' | 'debit'>('credit');
+  const [txType, setTxType] = useState<TransactionType>('credit');
+  const [category, setCategory] = useState<TransactionCategory>('sales');
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const resetManualForm = () => {
+    setStep('input');
+    setDate(new Date().toISOString().split('T')[0]);
+    setPartyName('');
+    setItem('');
+    setAmount('');
+    setTxType('credit');
+    setCategory('sales');
+    setFormError(null);
+    setActiveModal(null);
+  };
+
+  const handleProceedToReview = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
     const numAmount = parseFloat(amount);
-    if (!partyName.trim() || !item.trim() || isNaN(numAmount) || numAmount <= 0) {
+    if (!partyName.trim()) {
+      setFormError(language === 'hi' ? 'कृपया पार्टी / ग्राहक का नाम दर्ज करें' : 'Party name is required.');
+      return;
+    }
+    if (!item.trim()) {
+      setFormError(language === 'hi' ? 'कृपया सामान या कार्य का विवरण दर्ज करें' : 'Item description is required.');
+      return;
+    }
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setFormError(language === 'hi' ? 'कृपया मान्य राशि (> 0) दर्ज करें' : 'Please enter a valid positive amount.');
+      return;
+    }
+    if (!date) {
+      setFormError(language === 'hi' ? 'कृपया मान्य तारीख चुनें' : 'Please select a valid date.');
       return;
     }
 
+    setStep('review');
+  };
+
+  const handleConfirmAndAdd = () => {
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount <= 0) return;
+
     onAddTransaction({
-      date: new Date().toISOString().split('T')[0],
+      date: date.trim(),
       party_name: partyName.trim(),
       item: item.trim(),
       amount: numAmount,
       tx_type: txType,
+      category: category,
     });
 
-    // Reset and close
-    setPartyName('');
-    setItem('');
-    setAmount('');
-    setActiveModal(null);
+    resetManualForm();
   };
+
+  const selectedCategoryInfo = getCategoryInfo(category);
+  const isCredit = txType === 'credit';
+  const numAmount = parseFloat(amount) || 0;
 
   return (
     <section className="space-y-2" aria-labelledby="quick-actions-heading">
@@ -86,7 +125,10 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
         {/* Action 3: Manual Entry */}
         <button
           type="button"
-          onClick={() => setActiveModal('manual')}
+          onClick={() => {
+            setStep('input');
+            setActiveModal('manual');
+          }}
           className="min-h-[76px] flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 shadow-xs hover:bg-slate-50 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-600"
           aria-label={language === 'hi' ? 'हाथ से लेनदेन लिखें' : 'Add Manual Transaction'}
         >
@@ -107,19 +149,32 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 overflow-y-auto"
         >
-          <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 my-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">
-                {activeModal === 'voice' && (language === 'hi' ? 'आवाज से लेनदेन रिकॉर्ड करें' : 'Voice Transaction Input')}
-                {activeModal === 'scan' && (language === 'hi' ? 'पर्ची / बही-खाता स्कैन करें' : 'Scan Physical Chit / Ledger')}
-                {activeModal === 'manual' && (language === 'hi' ? 'नया लेनदेन जोड़ें' : 'New Transaction Entry')}
-              </h3>
+              <div className="flex items-center gap-2">
+                {activeModal === 'manual' && step === 'review' && (
+                  <button
+                    type="button"
+                    onClick={() => setStep('input')}
+                    className="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 cursor-pointer"
+                    aria-label="Back to edit form"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                )}
+                <h3 className="text-base font-bold text-slate-900">
+                  {activeModal === 'voice' && (language === 'hi' ? 'आवाज से लेनदेन रिकॉर्ड करें' : 'Voice Transaction Input')}
+                  {activeModal === 'scan' && (language === 'hi' ? 'पर्ची / बही-खाता स्कैन करें' : 'Scan Physical Chit / Ledger')}
+                  {activeModal === 'manual' && step === 'input' && (language === 'hi' ? 'नया लेनदेन दर्ज करें' : 'New Transaction Entry')}
+                  {activeModal === 'manual' && step === 'review' && (language === 'hi' ? 'प्रविष्टि की पुष्टि करें (Review)' : 'Review & Confirm Entry')}
+                </h3>
+              </div>
               <button
                 type="button"
-                onClick={() => setActiveModal(null)}
+                onClick={resetManualForm}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
                 aria-label="Close dialog"
               >
@@ -177,42 +232,109 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
               </div>
             )}
 
-            {/* Modal Body: Manual Form Entry */}
-            {activeModal === 'manual' && (
-              <form onSubmit={handleManualSubmit} className="space-y-3">
+            {/* Modal Body: Step 1 - Manual Form Entry */}
+            {activeModal === 'manual' && step === 'input' && (
+              <form onSubmit={handleProceedToReview} className="space-y-3">
+                {formError && (
+                  <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
+                    {formError}
+                  </div>
+                )}
+
+                {/* 1. Transaction Type (Credit vs Debit) */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {language === 'hi' ? 'लेनदेन का प्रकार' : 'Transaction Type'}
+                    {language === 'hi' ? '1. लेनदेन का प्रकार (Type)' : '1. Transaction Type'}
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setTxType('credit')}
-                      className={`min-h-[44px] rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                      className={`min-h-[44px] flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                         txType === 'credit'
                           ? 'bg-emerald-50 border-emerald-600 text-emerald-800 ring-2 ring-emerald-600'
-                          : 'bg-white border-slate-200 text-slate-600'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      {language === 'hi' ? 'आवक (Credit / बिक्री)' : 'Credit (Inflow / Sale)'}
+                      <ArrowUpRight className="w-4 h-4 text-emerald-600" />
+                      {language === 'hi' ? 'आवक (Credit / जमा)' : 'Credit (Inflow)'}
                     </button>
                     <button
                       type="button"
                       onClick={() => setTxType('debit')}
-                      className={`min-h-[44px] rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                      className={`min-h-[44px] flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                         txType === 'debit'
                           ? 'bg-rose-50 border-rose-600 text-rose-800 ring-2 ring-rose-600'
-                          : 'bg-white border-slate-200 text-slate-600'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      {language === 'hi' ? 'खर्च (Debit / खरीद)' : 'Debit (Outflow / Expense)'}
+                      <ArrowDownRight className="w-4 h-4 text-rose-600" />
+                      {language === 'hi' ? 'खर्च (Debit / निकासी)' : 'Debit (Outflow)'}
                     </button>
                   </div>
                 </div>
 
+                {/* 2. Transaction Category (Explicit User Selection - No React Inference) */}
+                <div>
+                  <label htmlFor="tx-category" className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'hi' ? '2. लेनदेन श्रेणी (Category)' : '2. Transaction Category'}
+                  </label>
+                  <select
+                    id="tx-category"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as TransactionCategory)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
+                  >
+                    {TRANSACTION_CATEGORIES.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {language === 'hi' ? cat.labelHi : `${cat.labelEn} (${cat.value})`}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {language === 'hi'
+                      ? 'स्पष्ट श्रेणी चयन: बिक्री को टर्नओवर में गिना जाएगा, ऋण या आहरण को अलग रखा जाएगा।'
+                      : 'Explicit accounting category used for deterministic turnover & operating surplus calculations.'}
+                  </p>
+                </div>
+
+                {/* 3. Amount */}
+                <div>
+                  <label htmlFor="tx-amount" className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'hi' ? '3. राशि (Amount in ₹)' : '3. Amount (INR)'}
+                  </label>
+                  <input
+                    id="tx-amount"
+                    type="number"
+                    min="1"
+                    step="any"
+                    required
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="₹ 5000"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+
+                {/* 4. Date */}
+                <div>
+                  <label htmlFor="tx-date" className="block text-xs font-bold text-slate-700 mb-1">
+                    {language === 'hi' ? '4. तारीख (Date)' : '4. Date'}
+                  </label>
+                  <input
+                    id="tx-date"
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+
+                {/* 5. Party Name */}
                 <div>
                   <label htmlFor="party-name" className="block text-xs font-bold text-slate-700 mb-1">
-                    {language === 'hi' ? 'ग्राहक / विक्रेता का नाम' : 'Party / Customer Name'}
+                    {language === 'hi' ? '5. ग्राहक / पार्टी का नाम' : '5. Customer / Party Name'}
                   </label>
                   <input
                     id="party-name"
@@ -225,9 +347,10 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
                   />
                 </div>
 
+                {/* 6. Item / Description */}
                 <div>
                   <label htmlFor="item-desc" className="block text-xs font-bold text-slate-700 mb-1">
-                    {language === 'hi' ? 'सामान या काम का विवरण' : 'Item / Work Description'}
+                    {language === 'hi' ? '6. सामान या काम का विवरण' : '6. Item / Work Description'}
                   </label>
                   <input
                     id="item-desc"
@@ -240,39 +363,134 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="tx-amount" className="block text-xs font-bold text-slate-700 mb-1">
-                    {language === 'hi' ? 'रुपये (Amount in INR)' : 'Amount (INR)'}
-                  </label>
-                  <input
-                    id="tx-amount"
-                    type="number"
-                    min="1"
-                    step="any"
-                    required
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="₹ 5000"
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  />
-                </div>
-
                 <div className="pt-2">
                   <button
                     type="submit"
                     className="w-full min-h-[48px] py-3 px-4 rounded-xl bg-blue-900 text-white font-bold text-sm shadow-md hover:bg-blue-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
                   >
-                    {language === 'hi' ? 'खाते में सहेजें (Save Entry)' : 'Save to Ledger'}
+                    {language === 'hi' ? 'विवरण की समीक्षा करें →' : 'Review & Confirm →'}
                   </button>
                 </div>
               </form>
+            )}
+
+            {/* Modal Body: Step 2 - Review & Confirm Step */}
+            {activeModal === 'manual' && step === 'review' && (
+              <div className="space-y-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  {/* Type and Amount Header Banner */}
+                  <div
+                    className={`flex items-center justify-between p-3 rounded-lg ${
+                      isCredit ? 'bg-emerald-100/90 text-emerald-900' : 'bg-rose-100/90 text-rose-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isCredit ? (
+                        <ArrowUpRight className="w-5 h-5 text-emerald-700" />
+                      ) : (
+                        <ArrowDownRight className="w-5 h-5 text-rose-700" />
+                      )}
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider block">
+                          {isCredit
+                            ? language === 'hi' ? 'आवक (Credit / Inflow)' : 'Inflow (Credit)'
+                            : language === 'hi' ? 'खर्च (Debit / Outflow)' : 'Outflow (Debit)'}
+                        </span>
+                        <span className="text-xs font-semibold">
+                          {language === 'hi'
+                            ? isCredit ? 'खाते में जमा' : 'खाते से खर्च'
+                            : isCredit ? 'Cash Inflow' : 'Cash Outflow'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-black tracking-tight">
+                        {isCredit ? '+' : '-'}₹{numAmount.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 6 Fields Detailed Breakdown */}
+                  <div className="grid grid-cols-1 gap-2 pt-1 text-xs">
+                    <div className="flex items-center justify-between py-1.5 border-b border-slate-200">
+                      <span className="text-slate-500 font-medium flex items-center gap-1">
+                        <Tag className="w-3.5 h-3.5" />
+                        {language === 'hi' ? 'श्रेणी (Category)' : 'Category'}
+                      </span>
+                      <span
+                        className={`font-semibold px-2 py-0.5 rounded-full border text-[11px] ${
+                          selectedCategoryInfo?.badgeClass ?? 'bg-slate-100 text-slate-800'
+                        }`}
+                      >
+                        {selectedCategoryInfo
+                          ? language === 'hi'
+                            ? selectedCategoryInfo.labelHi
+                            : selectedCategoryInfo.labelEn
+                          : category}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between py-1.5 border-b border-slate-200">
+                      <span className="text-slate-500 font-medium flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5" />
+                        {language === 'hi' ? 'तारीख (Date)' : 'Date'}
+                      </span>
+                      <span className="font-semibold text-slate-900">{date}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between py-1.5 border-b border-slate-200">
+                      <span className="text-slate-500 font-medium flex items-center gap-1">
+                        <User className="w-3.5 h-3.5" />
+                        {language === 'hi' ? 'ग्राहक / पार्टी' : 'Party / Customer'}
+                      </span>
+                      <span className="font-semibold text-slate-900">{partyName}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between py-1.5">
+                      <span className="text-slate-500 font-medium flex items-center gap-1">
+                        <Utensils className="w-3.5 h-3.5" />
+                        {language === 'hi' ? 'सामान / कार्य' : 'Item / Description'}
+                      </span>
+                      <span className="font-semibold text-slate-900">{item}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Micro-Enterprise Accounting Assurance Note */}
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                  <p>
+                    {language === 'hi'
+                      ? 'पुष्टि करने पर यह लेनदेन सीधे अर्थसहायक के वित्तीय इंजन में दर्ज होगा और टर्नओवर व बैंक साख का तुरंत पुनर्गणन होगा।'
+                      : 'Upon confirmation, this entry will be sent to the FastAPI finance engine to deterministically recalculate turnover, working capital, and loan eligibility.'}
+                  </p>
+                </div>
+
+                {/* Two Action Buttons: Edit Details vs Confirm & Save */}
+                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setStep('input')}
+                    className="min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    {language === 'hi' ? '← विवरण सुधारें' : '← Edit Details'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmAndAdd}
+                    className="min-h-[46px] py-2.5 px-3 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-md hover:bg-emerald-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600"
+                  >
+                    {language === 'hi' ? 'पुष्टि करें और जोड़ें ✓' : 'Confirm & Save ✓'}
+                  </button>
+                </div>
+              </div>
             )}
 
             {/* Modal Footer for Voice & Scan */}
             {activeModal !== 'manual' && (
               <button
                 type="button"
-                onClick={() => setActiveModal(null)}
+                onClick={resetManualForm}
                 className="w-full min-h-[44px] py-2.5 px-4 rounded-xl border border-slate-300 bg-slate-50 text-slate-700 font-semibold text-xs hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 {language === 'hi' ? 'बंद करें' : 'Close'}

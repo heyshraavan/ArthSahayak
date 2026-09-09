@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Calendar } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Calendar, Tag } from 'lucide-react';
+import { getCategoryInfo } from '../lib/categories';
 import type { Transaction } from '../types';
-
-
 
 interface RecentTransactionsProps {
   transactions: Transaction[];
@@ -74,13 +73,14 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transact
         ) : (
           filtered.map((tx) => {
             const isCredit = tx.tx_type === 'credit';
+            const categoryInfo = getCategoryInfo(tx.category);
 
             return (
               <article
                 key={tx.id}
                 className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex items-center justify-between gap-3 hover:border-slate-300 transition-colors"
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 min-w-0">
                   <div
                     className={`mt-0.5 p-2 rounded-xl shrink-0 ${
                       isCredit ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
@@ -93,23 +93,31 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transact
                     )}
                   </div>
 
-                  <div>
-                    <p className="text-sm font-bold text-slate-900 leading-tight">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900 leading-tight truncate">
                       {tx.party_name}
                     </p>
-                    <p className="text-xs text-slate-600 mt-0.5">{tx.item}</p>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
+                    <p className="text-xs text-slate-600 mt-0.5 truncate">{tx.item}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-slate-500">
+                      <span className="flex items-center gap-1 shrink-0">
+                        <Calendar className="w-3 h-3 text-slate-400" />
                         {tx.date}
                       </span>
                       <span
-                        className={`font-semibold uppercase tracking-wider text-[10px] px-1.5 py-0.2 rounded ${
+                        className={`font-semibold uppercase tracking-wider text-[10px] px-1.5 py-0.5 rounded shrink-0 ${
                           isCredit ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                         }`}
                       >
                         {isCredit ? (language === 'hi' ? 'आवक' : 'Credit') : (language === 'hi' ? 'खर्च' : 'Debit')}
                       </span>
+                      {categoryInfo && (
+                        <span
+                          className={`flex items-center gap-1 font-medium text-[10px] px-2 py-0.5 rounded-full border shrink-0 ${categoryInfo.badgeClass}`}
+                        >
+                          <Tag className="w-2.5 h-2.5" />
+                          {language === 'hi' ? categoryInfo.labelHi : categoryInfo.labelEn}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

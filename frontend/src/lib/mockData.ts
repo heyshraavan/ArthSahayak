@@ -39,6 +39,7 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
     item: '2 Desks & Benches',
     amount: 14000,
     tx_type: 'credit',
+    category: 'sales',
   },
   {
     id: 'tx-2',
@@ -47,6 +48,7 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
     item: 'Sal & Teak Planks',
     amount: 7500,
     tx_type: 'debit',
+    category: 'raw_material',
   },
   {
     id: 'tx-3',
@@ -55,6 +57,7 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
     item: 'Fevicol, Screws, Hinges',
     amount: 1700,
     tx_type: 'debit',
+    category: 'raw_material',
   },
   {
     id: 'tx-4',
@@ -63,6 +66,7 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
     item: 'Door Frame Fitting',
     amount: 8500,
     tx_type: 'credit',
+    category: 'sales',
   },
   {
     id: 'tx-5',
@@ -71,6 +75,7 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
     item: 'Weekly Wages',
     amount: 5000,
     tx_type: 'debit',
+    category: 'operating_expense',
   },
   {
     id: 'tx-6',
@@ -79,5 +84,6 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
     item: 'Display Counter Payment',
     amount: 20000,
     tx_type: 'credit',
+    category: 'sales',
   },
 ];

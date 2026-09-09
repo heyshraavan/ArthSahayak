@@ -1,5 +1,16 @@
 export type TransactionType = 'credit' | 'debit';
 
+export type TransactionCategory =
+  | 'sales'
+  | 'raw_material'
+  | 'operating_expense'
+  | 'loan_disbursement'
+  | 'capital_injection'
+  | 'loan_repayment'
+  | 'personal_drawings'
+  | 'refund'
+  | 'other';
+
 export interface Transaction {
   id: string;
   date: string;
@@ -7,6 +18,7 @@ export interface Transaction {
   item: string;
   amount: number;
   tx_type: TransactionType;
+  category?: TransactionCategory | null;
 }
 
 export interface BackendTransaction {
@@ -15,6 +27,7 @@ export interface BackendTransaction {
   item: string;
   amount: number;
   tx_type: TransactionType;
+  category?: TransactionCategory | null;
 }
 
 export interface FinanceCalculationRequest {
