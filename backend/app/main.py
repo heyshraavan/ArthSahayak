@@ -13,8 +13,12 @@ from app.schemas import (
     VoiceExtractionResponse,
 )
 from app.voice_engine import (
+    AudioValidationError,
     StubExtractionProvider,
     StubTranscriptionProvider,
+    TranscriptionError,
+    VoiceConfigurationError,
+    get_transcription_provider,
     validate_suggested_transaction,
 )
 
@@ -38,8 +42,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Default stub providers for testing interface boundaries and UI flows
-transcription_provider = StubTranscriptionProvider()
 extraction_provider = StubExtractionProvider()
 
 
@@ -64,7 +66,12 @@ def calculate_finance(request: FinanceCalculationRequest) -> FinancialSummary:
 
 @app.post("/voice/transcribe", response_model=TranscriptionResponse)
 def transcribe_audio(request: AudioTranscriptionRequest) -> TranscriptionResponse:
-    """Transcribe audio data through the transcription provider abstraction."""
+    """Transcribe audio data through the transcription provider abstraction.
+
+    Dynamically resolves provider:
+    - Real Groq Whisper provider when GROQ_API_KEY is configured.
+    - Safe stub provider when GROQ_API_KEY is absent.
+    """
     try:
         audio_bytes = base64.b64decode(request.audio_base64)
     except Exception as e:
@@ -73,11 +80,30 @@ def transcribe_audio(request: AudioTranscriptionRequest) -> TranscriptionRespons
             detail=f"Invalid base64 audio data: {e}",
         )
 
-    transcript = transcription_provider.transcribe(
-        audio_data=audio_bytes,
-        mime_type=request.mime_type or "audio/webm",
-    )
+    provider = get_transcription_provider()
+    try:
+        transcript = provider.transcribe(
+            audio_data=audio_bytes,
+            mime_type=request.mime_type or "audio/webm",
+        )
+    except AudioValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+    except VoiceConfigurationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Voice configuration error: {e}",
+        )
+    except TranscriptionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Upstream transcription error: {e}",
+        )
+
     return TranscriptionResponse(transcript=transcript, confidence=0.95)
+
 
 
 @app.post("/voice/extract", response_model=VoiceExtractionResponse)

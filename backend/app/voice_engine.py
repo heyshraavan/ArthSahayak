@@ -2,9 +2,9 @@
 
 Architecture:
 Audio
--> TranscriptionProvider
+-> TranscriptionProvider (Groq Whisper / Stub)
 -> transcript
--> ExtractionProvider
+-> ExtractionProvider (Stub)
 -> untrusted suggested transaction
 -> Pydantic validation
 -> human review/edit
@@ -12,14 +12,65 @@ Audio
 -> trusted ledger transaction
 """
 
-import base64
 from datetime import date
+import os
 import re
-from typing import Any, Protocol
+from typing import Any, Optional, Protocol
 
 from pydantic import ValidationError
 
 from app.schemas import Transaction, TransactionCategory
+
+MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB application limit
+
+SUPPORTED_AUDIO_MIME_TYPES = {
+    "audio/webm",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/wave",
+    "audio/x-wav",
+    "audio/ogg",
+    "audio/m4a",
+    "audio/x-m4a",
+    "audio/flac",
+}
+
+
+class VoiceConfigurationError(Exception):
+    """Raised when voice provider configuration or credentials are missing or invalid."""
+    pass
+
+
+class TranscriptionError(Exception):
+    """Raised when upstream transcription service encounters an error."""
+    pass
+
+
+class AudioValidationError(Exception):
+    """Raised when audio payload fails validation (e.g. unsupported MIME or > 10 MB)."""
+    pass
+
+
+def validate_audio_payload(audio_data: bytes, mime_type: str) -> None:
+    """Validate audio MIME type and 10 MB application-level size limit.
+
+    Raises AudioValidationError if audio is empty, exceeds 10 MB, or has unsupported MIME.
+    """
+    if not audio_data:
+        raise AudioValidationError("Audio data is empty")
+
+    if len(audio_data) > MAX_AUDIO_SIZE_BYTES:
+        raise AudioValidationError(
+            f"Audio payload size ({len(audio_data)} bytes) exceeds the 10 MB application limit"
+        )
+
+    normalized_mime = mime_type.split(";")[0].strip().lower()
+    if normalized_mime not in SUPPORTED_AUDIO_MIME_TYPES:
+        raise AudioValidationError(
+            f"Unsupported audio MIME type '{mime_type}'. Supported formats: {', '.join(sorted(SUPPORTED_AUDIO_MIME_TYPES))}"
+        )
 
 
 class TranscriptionProvider(Protocol):
@@ -30,12 +81,77 @@ class TranscriptionProvider(Protocol):
         ...
 
 
-class ExtractionProvider(Protocol):
-    """Protocol for extracting structured transaction data from speech transcripts."""
+class GroqWhisperTranscriptionProvider:
+    """Real speech transcription provider utilizing Groq Whisper API (whisper-large-v3).
 
-    def extract(self, transcript: str) -> dict[str, Any]:
-        """Extract raw, untrusted transaction dictionary from transcript text."""
-        ...
+    Strictly server-side integration. The API key is read from GROQ_API_KEY environment
+    variable or passed during initialization. Never hard-coded, never committed.
+    """
+
+    def __init__(self, api_key: Optional[str] = None, client: Optional[Any] = None) -> None:
+        self.api_key = (api_key or os.environ.get("GROQ_API_KEY", "")).strip()
+        if not self.api_key:
+            raise VoiceConfigurationError(
+                "GROQ_API_KEY is not configured. Provide an API key or set GROQ_API_KEY environment variable."
+            )
+
+        if client is not None:
+            self._client = client
+        else:
+            try:
+                from groq import Groq
+                self._client = Groq(api_key=self.api_key)
+            except ImportError as e:
+                raise VoiceConfigurationError(f"Groq SDK is not installed: {e}") from e
+
+    def transcribe(self, audio_data: bytes, mime_type: str = "audio/webm") -> str:
+        """Transcribe audio bytes using Groq Whisper.
+
+        Validates MIME type and size limit before calling Groq.
+        Detects multilingual speech without hard-coding language.
+        Uses temperature=0 and response_format='json'.
+        """
+        validate_audio_payload(audio_data, mime_type)
+
+        # Derive safe file extension for Whisper
+        normalized_mime = mime_type.split(";")[0].strip().lower()
+        extension_map = {
+            "audio/webm": "recording.webm",
+            "audio/wav": "recording.wav",
+            "audio/wave": "recording.wav",
+            "audio/x-wav": "recording.wav",
+            "audio/mp3": "recording.mp3",
+            "audio/mpeg": "recording.mp3",
+            "audio/mp4": "recording.m4a",
+            "audio/m4a": "recording.m4a",
+            "audio/x-m4a": "recording.m4a",
+            "audio/ogg": "recording.ogg",
+            "audio/flac": "recording.flac",
+        }
+        filename = extension_map.get(normalized_mime, "recording.webm")
+
+        try:
+            response = self._client.audio.transcriptions.create(
+                file=(filename, audio_data),
+                model="whisper-large-v3",
+                temperature=0.0,
+                response_format="json",
+            )
+        except Exception as err:
+            raise TranscriptionError(f"Groq Whisper transcription failed: {err}") from err
+
+        # Extract transcript text
+        if hasattr(response, "text"):
+            transcript = response.text
+        elif isinstance(response, dict):
+            transcript = response.get("text", "")
+        else:
+            transcript = str(response)
+
+        if not transcript.strip():
+            raise TranscriptionError("Groq Whisper returned an empty transcription")
+
+        return transcript.strip()
 
 
 class StubTranscriptionProvider:
@@ -46,12 +162,35 @@ class StubTranscriptionProvider:
     """
 
     def transcribe(self, audio_data: bytes, mime_type: str = "audio/webm") -> str:
+        validate_audio_payload(audio_data, mime_type)
+
         # Check for test payload marker
         if audio_data.startswith(b"test:"):
             return audio_data[5:].decode("utf-8", errors="replace").strip()
 
         # Representative default rural transaction transcript for stub testing
         return "Received Rs 14000 from Anil Babu for 2 desks"
+
+
+def get_transcription_provider(api_key: Optional[str] = None) -> TranscriptionProvider:
+    """Resolve active transcription provider based on environment configuration.
+
+    If GROQ_API_KEY is present and non-empty, selects GroqWhisperTranscriptionProvider.
+    If GROQ_API_KEY is absent or empty, safely falls back to StubTranscriptionProvider.
+    Application startup NEVER fails merely because GROQ_API_KEY is absent.
+    """
+    key = (api_key or os.environ.get("GROQ_API_KEY", "")).strip()
+    if key:
+        return GroqWhisperTranscriptionProvider(api_key=key)
+    return StubTranscriptionProvider()
+
+
+class ExtractionProvider(Protocol):
+    """Protocol for extracting structured transaction data from speech transcripts."""
+
+    def extract(self, transcript: str) -> dict[str, Any]:
+        """Extract raw, untrusted transaction dictionary from transcript text."""
+        ...
 
 
 class StubExtractionProvider:
