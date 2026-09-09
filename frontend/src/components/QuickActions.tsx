@@ -1,17 +1,44 @@
-import React, { useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Calendar, Camera, CheckCircle2, ChevronLeft, Mic, Plus, Tag, User, Utensils, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Calendar,
+  Camera,
+  CheckCircle2,
+  ChevronLeft,
+  Mic,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Square,
+  Tag,
+  User,
+  Utensils,
+  X,
+} from 'lucide-react';
 import { getCategoryInfo, TRANSACTION_CATEGORIES } from '../lib/categories';
-import type { Transaction, TransactionCategory, TransactionType } from '../types';
+import { BackendExtractionProvider } from '../services/extraction';
+import { BackendTranscriptionProvider } from '../services/transcription';
+import type {
+  Transaction,
+  TransactionCategory,
+  TransactionType,
+  VoiceUIState,
+} from '../types';
 
 interface QuickActionsProps {
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
   language: 'en' | 'hi';
 }
 
+const transcriptionProvider = new BackendTranscriptionProvider();
+const extractionProvider = new BackendExtractionProvider();
+
 export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, language }) => {
   const [activeModal, setActiveModal] = useState<'voice' | 'scan' | 'manual' | null>(null);
 
-  // Manual entry two-step state
+  // Manual & Voice entry two-step state
   const [step, setStep] = useState<'input' | 'review'>('input');
   const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [partyName, setPartyName] = useState('');
@@ -21,7 +48,31 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
   const [category, setCategory] = useState<TransactionCategory>('sales');
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Voice-specific state machine: idle | recording | processing | extracted | error
+  const [voiceState, setVoiceState] = useState<VoiceUIState>('idle');
+  const [transcriptText, setTranscriptText] = useState<string>('');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
+
+  // MediaRecorder refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+
+  // Clean up audio tracks & timers when unmounting or switching modals
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
+
   const resetManualForm = () => {
+    // Stop any active audio recording
+    stopAudioRecording(false);
     setStep('input');
     setDate(new Date().toISOString().split('T')[0]);
     setPartyName('');
@@ -30,7 +81,143 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
     setTxType('credit');
     setCategory('sales');
     setFormError(null);
+    setVoiceState('idle');
+    setTranscriptText('');
+    setVoiceError(null);
+    setRecordingSeconds(0);
     setActiveModal(null);
+  };
+
+  const handleStartVoiceModal = () => {
+    resetManualForm();
+    setActiveModal('voice');
+    setVoiceState('idle');
+  };
+
+  const startAudioRecording = async () => {
+    setVoiceError(null);
+    audioChunksRef.current = [];
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setVoiceState('error');
+      setVoiceError(
+        language === 'hi'
+          ? 'इस ब्राउज़र में माइक्रोफ़ोन समर्थित नहीं है। कृपया नीचे दिए गए उदाहरणों का उपयोग करें।'
+          : 'Microphone is not supported in this browser. Please use the sample prompts below.'
+      );
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        if (audioChunksRef.current.length > 0) {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          await handleProcessAudio(audioBlob);
+        }
+      };
+
+      mediaRecorder.start();
+      setVoiceState('recording');
+      setRecordingSeconds(0);
+
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = window.setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err: unknown) {
+      setVoiceState('error');
+      const msg = err instanceof Error ? err.message : 'Permission denied';
+      setVoiceError(
+        language === 'hi'
+          ? `माइक्रोफ़ोन अनुमति नहीं मिली (${msg})। कृपया अनुमति दें या नीचे दिए गए उदाहरण चुनें।`
+          : `Microphone permission denied (${msg}). Please allow access or try a sample transaction below.`
+      );
+    }
+  };
+
+  const stopAudioRecording = (process = true) => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      if (!process) {
+        // Discard chunks if cancelling
+        audioChunksRef.current = [];
+      }
+      mediaRecorderRef.current.stop();
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
+  const handleProcessAudio = async (audioBlob: Blob) => {
+    setVoiceState('processing');
+    setVoiceError(null);
+
+    try {
+      // 1. Transcribe via provider abstraction
+      const transcript = await transcriptionProvider.transcribe(audioBlob);
+      setTranscriptText(transcript);
+
+      // 2. Extract structured suggestion via provider abstraction
+      const extractionResult = await extractionProvider.extract(transcript);
+      populateExtractedFields(extractionResult.suggested_transaction);
+      setVoiceState('extracted');
+    } catch (err: unknown) {
+      setVoiceState('error');
+      const msg = err instanceof Error ? err.message : 'Extraction failed';
+      setVoiceError(msg);
+    }
+  };
+
+  const handleProcessSampleTranscript = async (sampleText: string) => {
+    setVoiceState('processing');
+    setVoiceError(null);
+    setTranscriptText(sampleText);
+
+    try {
+      const extractionResult = await extractionProvider.extract(sampleText);
+      populateExtractedFields(extractionResult.suggested_transaction);
+      setVoiceState('extracted');
+    } catch (err: unknown) {
+      setVoiceState('error');
+      const msg = err instanceof Error ? err.message : 'Extraction failed';
+      setVoiceError(msg);
+    }
+  };
+
+  const populateExtractedFields = (tx: {
+    date: string;
+    party_name: string;
+    item: string;
+    amount: number;
+    tx_type: TransactionType;
+    category?: string | null;
+  }) => {
+    setDate(tx.date || new Date().toISOString().split('T')[0]);
+    setPartyName(tx.party_name || '');
+    setItem(tx.item || '');
+    setAmount(String(tx.amount || ''));
+    setTxType(tx.tx_type || 'credit');
+    setCategory((tx.category as TransactionCategory) || (tx.tx_type === 'debit' ? 'raw_material' : 'sales'));
+    setStep('input');
   };
 
   const handleProceedToReview = (e: React.FormEvent) => {
@@ -62,6 +249,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) return;
 
+    // Guaranteed Human Confirmation: Only explicit user click invokes onAddTransaction
     onAddTransaction({
       date: date.trim(),
       party_name: partyName.trim(),
@@ -78,6 +266,13 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
   const isCredit = txType === 'credit';
   const numAmount = parseFloat(amount) || 0;
 
+  // Formatting seconds into MM:SS
+  const formatSeconds = (sec: number) => {
+    const mins = Math.floor(sec / 60);
+    const remaining = sec % 60;
+    return `${mins}:${remaining < 10 ? '0' : ''}${remaining}`;
+  };
+
   return (
     <section className="space-y-2" aria-labelledby="quick-actions-heading">
       <h2 id="quick-actions-heading" className="text-sm font-bold text-slate-900 uppercase tracking-wider">
@@ -89,7 +284,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
         {/* Action 1: Speak Transaction */}
         <button
           type="button"
-          onClick={() => setActiveModal('voice')}
+          onClick={handleStartVoiceModal}
           className="min-h-[76px] flex flex-col items-center justify-center p-2.5 rounded-xl border border-blue-200 bg-blue-900 text-white shadow-xs hover:bg-blue-800 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
           aria-label={language === 'hi' ? 'बोलकर लेनदेन जोड़ें' : 'Speak Transaction'}
         >
@@ -126,6 +321,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
         <button
           type="button"
           onClick={() => {
+            resetManualForm();
             setStep('input');
             setActiveModal('manual');
           }}
@@ -155,7 +351,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                {activeModal === 'manual' && step === 'review' && (
+                {((activeModal === 'manual' && step === 'review') || (activeModal === 'voice' && step === 'review')) && (
                   <button
                     type="button"
                     onClick={() => setStep('input')}
@@ -166,10 +362,24 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
                   </button>
                 )}
                 <h3 className="text-base font-bold text-slate-900">
-                  {activeModal === 'voice' && (language === 'hi' ? 'आवाज से लेनदेन रिकॉर्ड करें' : 'Voice Transaction Input')}
-                  {activeModal === 'scan' && (language === 'hi' ? 'पर्ची / बही-खाता स्कैन करें' : 'Scan Physical Chit / Ledger')}
-                  {activeModal === 'manual' && step === 'input' && (language === 'hi' ? 'नया लेनदेन दर्ज करें' : 'New Transaction Entry')}
-                  {activeModal === 'manual' && step === 'review' && (language === 'hi' ? 'प्रविष्टि की पुष्टि करें (Review)' : 'Review & Confirm Entry')}
+                  {activeModal === 'voice' && step === 'input' && voiceState !== 'extracted' && (
+                    language === 'hi' ? 'आवाज से लेनदेन दर्ज करें' : 'Voice Transaction Input'
+                  )}
+                  {activeModal === 'voice' && step === 'input' && voiceState === 'extracted' && (
+                    language === 'hi' ? 'AI प्रविष्टि की समीक्षा करें' : 'Review AI Suggestion'
+                  )}
+                  {activeModal === 'voice' && step === 'review' && (
+                    language === 'hi' ? 'लेनदेन की पुष्टि करें (Confirm)' : 'Final Review & Confirm'
+                  )}
+                  {activeModal === 'scan' && (
+                    language === 'hi' ? 'पर्ची / बही-खाता स्कैन करें' : 'Scan Physical Chit / Ledger'
+                  )}
+                  {activeModal === 'manual' && step === 'input' && (
+                    language === 'hi' ? 'नया लेनदेन दर्ज करें' : 'New Transaction Entry'
+                  )}
+                  {activeModal === 'manual' && step === 'review' && (
+                    language === 'hi' ? 'प्रविष्टि की पुष्टि करें (Review)' : 'Review & Confirm Entry'
+                  )}
                 </h3>
               </div>
               <button
@@ -182,59 +392,167 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
               </button>
             </div>
 
-            {/* Modal Body: Voice Action Preview */}
-            {activeModal === 'voice' && (
-              <div className="py-6 text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-blue-50 border-2 border-blue-200 text-blue-900 flex items-center justify-center mx-auto">
-                  <Mic className="w-8 h-8 animate-pulse text-blue-900" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-slate-900">
-                    {language === 'hi' ? 'अपनी भाषा में बोलें' : 'Speak naturally in your dialect'}
-                  </p>
-                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                    {language === 'hi'
-                      ? 'उदाहरण: "रमेश को 500 रुपये की लकड़ी दी" या "स्कूल से 14,000 रुपये मिले"'
-                      : 'E.g., "Received Rs. 14,000 from school for 2 desks" or "Paid Rs. 7,500 for timber planks"'}
-                  </p>
-                </div>
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 text-left">
-                  <b>{language === 'hi' ? 'प्रोटोटाइप सूचना:' : 'Prototype Milestone:'}</b>{' '}
-                  {language === 'hi'
-                    ? 'माइक्रोफ़ोन STT पाइपलाइन (Bhashini/Whisper) आगामी विकास चरण में सीधे कनेक्ट होगी।'
-                    : 'The speech-to-text pipeline (Bhashini/Whisper integration) will be hooked directly in the upcoming milestone.'}
-                </div>
+            {/* Modal Body: Voice Recording & Processing State Machine */}
+            {activeModal === 'voice' && step === 'input' && voiceState !== 'extracted' && (
+              <div className="space-y-4 py-2">
+                {/* State 1: Idle (Ready to record or choose sample) */}
+                {voiceState === 'idle' && (
+                  <div className="space-y-4 text-center">
+                    <button
+                      type="button"
+                      onClick={startAudioRecording}
+                      className="w-20 h-20 rounded-full bg-blue-900 hover:bg-blue-800 text-white flex flex-col items-center justify-center mx-auto shadow-lg active:scale-95 transition-transform cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-300"
+                      aria-label="Start recording audio"
+                    >
+                      <Mic className="w-8 h-8 text-blue-100" />
+                    </button>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">
+                        {language === 'hi' ? 'बोलने के लिए माइक दबाएं' : 'Tap to Start Speaking'}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {language === 'hi'
+                          ? 'अपनी भाषा में ग्राहक, सामान, राशि और विवरण बोलें'
+                          : 'Speak naturally: customer, goods, amount, and payment'}
+                      </p>
+                    </div>
+
+                    {/* Quick Sample Chips for Testing & Verification */}
+                    <div className="pt-2 border-t border-slate-100 text-left space-y-2">
+                      <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                        {language === 'hi' ? 'या तुरंत परीक्षण के लिए उदाहरण चुनें:' : 'Or tap a sample to test extraction:'}
+                      </p>
+                      <div className="space-y-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleProcessSampleTranscript('Received Rs 14000 from Anil Babu for 2 desks')}
+                          className="w-full text-left p-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-xs text-slate-800 transition-colors cursor-pointer"
+                        >
+                          <span className="font-semibold text-blue-900">[Sales]</span> "Received Rs 14000 from Anil Babu for 2 desks"
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleProcessSampleTranscript('Paid Rs 7500 to Maa Tara Timber Depot for timber planks')}
+                          className="w-full text-left p-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-xs text-slate-800 transition-colors cursor-pointer"
+                        >
+                          <span className="font-semibold text-amber-900">[Raw Material]</span> "Paid Rs 7500 to Maa Tara Timber Depot for timber planks"
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleProcessSampleTranscript('Paid Rs 5000 to Biren Da for weekly wages')}
+                          className="w-full text-left p-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-orange-50 hover:border-orange-300 text-xs text-slate-800 transition-colors cursor-pointer"
+                        >
+                          <span className="font-semibold text-orange-900">[OpEx]</span> "Paid Rs 5000 to Biren Da for weekly wages"
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* State 2: Recording Audio */}
+                {voiceState === 'recording' && (
+                  <div className="space-y-4 text-center py-4">
+                    <div className="relative w-20 h-20 rounded-full bg-rose-100 flex items-center justify-center mx-auto">
+                      <span className="absolute w-full h-full rounded-full bg-rose-400 opacity-75 animate-ping" />
+                      <Mic className="w-9 h-9 text-rose-600 relative z-10" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold">
+                        <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+                        {language === 'hi' ? 'रिकॉर्डिंग चालू है...' : 'Recording in progress...'} ({formatSeconds(recordingSeconds)})
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {language === 'hi' ? 'बोलने के बाद लाल बटन दबाएं' : 'Click stop when finished speaking'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => stopAudioRecording(true)}
+                      className="min-h-[48px] px-6 py-2.5 rounded-xl bg-rose-600 text-white font-bold text-xs shadow-md hover:bg-rose-700 transition-colors inline-flex items-center gap-2 cursor-pointer"
+                    >
+                      <Square className="w-4 h-4 fill-current" />
+                      {language === 'hi' ? 'रिकॉर्डिंग रोकें (Finish)' : 'Stop Recording'}
+                    </button>
+                  </div>
+                )}
+
+                {/* State 3: Processing (Transcription & Extraction) */}
+                {voiceState === 'processing' && (
+                  <div className="space-y-3 text-center py-8">
+                    <div className="w-12 h-12 border-3 border-blue-900 border-t-transparent rounded-full animate-spin mx-auto" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-slate-900">
+                        {language === 'hi' ? 'ऑडियो का विश्लेषण हो रहा है...' : 'Processing Speech Audio...'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {language === 'hi'
+                          ? 'आवाज को पाठ में बदलकर वित्तीय विवरण निकाला जा रहा है'
+                          : 'Transcribing speech & extracting transaction candidate'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* State 4: Error State */}
+                {voiceState === 'error' && (
+                  <div className="space-y-4 py-2">
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-xs text-rose-800">
+                      <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold">{language === 'hi' ? 'आवाज प्रविष्टि त्रुटि' : 'Voice Extraction Error'}</p>
+                        <p className="mt-0.5">{voiceError || 'Failed to process voice input.'}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setVoiceState('idle')}
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        {language === 'hi' ? 'पुनः प्रयास करें' : 'Try Again'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveModal('manual');
+                          setStep('input');
+                        }}
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-blue-900 text-white font-bold text-xs hover:bg-blue-800 transition-colors cursor-pointer"
+                      >
+                        {language === 'hi' ? 'हाथ से लिखें' : 'Use Manual Form'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Modal Body: Scan Action Preview */}
-            {activeModal === 'scan' && (
-              <div className="py-6 text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-800 flex items-center justify-center mx-auto">
-                  <Camera className="w-8 h-8 text-emerald-700" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-slate-900">
-                    {language === 'hi' ? 'हाथ से लिखे पर्चे की तस्वीर लें' : 'Photograph Handwritten Paper Chit'}
-                  </p>
-                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                    {language === 'hi'
-                      ? 'दुकानदार या कारीगर की कच्ची पर्ची, उधारी नोट या बही-खाता पन्ना'
-                      : 'Take a clear photo of torn paper chits, raw receipts, or bahi-khata tallies'}
-                  </p>
-                </div>
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 text-left">
-                  <b>{language === 'hi' ? 'प्रोटोटाइप सूचना:' : 'Prototype Milestone:'}</b>{' '}
-                  {language === 'hi'
-                    ? 'कैमरा OCR और विज़न पाइपलाइन आगामी विकास चरण में जोड़ी जाएगी।'
-                    : 'The camera OCR document extraction pipeline will be hooked directly in the upcoming milestone.'}
-                </div>
-              </div>
-            )}
-
-            {/* Modal Body: Step 1 - Manual Form Entry */}
-            {activeModal === 'manual' && step === 'input' && (
+            {/* Modal Body: Step 1 Form Entry (used for Manual OR Voice in Extracted state) */}
+            {((activeModal === 'manual' && step === 'input') || (activeModal === 'voice' && step === 'input' && voiceState === 'extracted')) && (
               <form onSubmit={handleProceedToReview} className="space-y-3">
+                {/* Prominent Banner when Voice Extracted */}
+                {activeModal === 'voice' && voiceState === 'extracted' && (
+                  <div className="p-3 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1.5 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                      <Sparkles className="w-4 h-4 text-amber-700 shrink-0" />
+                      <span>{language === 'hi' ? 'AI द्वारा निकाला गया — कृपया जांचें' : 'AI-extracted — Please verify'}</span>
+                    </div>
+                    {transcriptText && (
+                      <p className="text-[11px] text-amber-800 italic bg-white/70 p-1.5 rounded border border-amber-200">
+                        "{transcriptText}"
+                      </p>
+                    )}
+                    <p className="text-[10px] text-amber-700">
+                      {language === 'hi'
+                        ? 'सभी फ़ील्ड और सुझाई गई श्रेणी संपादन योग्य हैं। कृपया पुष्टि करने से पहले विवरण जांच लें।'
+                        : 'All fields & category are suggestions. You can edit any field before confirming.'}
+                    </p>
+                  </div>
+                )}
+
                 {formError && (
                   <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
                     {formError}
@@ -274,10 +592,17 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
                   </div>
                 </div>
 
-                {/* 2. Transaction Category (Explicit User Selection - No React Inference) */}
+                {/* 2. Transaction Category (Explicit User Selection / Editable AI Suggestion) */}
                 <div>
                   <label htmlFor="tx-category" className="block text-xs font-bold text-slate-700 mb-1">
-                    {language === 'hi' ? '2. लेनदेन श्रेणी (Category)' : '2. Transaction Category'}
+                    {activeModal === 'voice' && voiceState === 'extracted' ? (
+                      <span className="flex items-center gap-1 text-amber-900">
+                        <Tag className="w-3.5 h-3.5" />
+                        {language === 'hi' ? '2. सुझाई गई श्रेणी (सत्यापित करें या बदलें)' : '2. Suggested Category (Verify or Change)'}
+                      </span>
+                    ) : (
+                      language === 'hi' ? '2. लेनदेन श्रेणी (Category)' : '2. Transaction Category'
+                    )}
                   </label>
                   <select
                     id="tx-category"
@@ -363,19 +688,29 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
                   />
                 </div>
 
-                <div className="pt-2">
+                <div className="pt-2 flex gap-2">
+                  {activeModal === 'voice' && voiceState === 'extracted' && (
+                    <button
+                      type="button"
+                      onClick={() => setVoiceState('idle')}
+                      className="min-h-[48px] py-3 px-4 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      {language === 'hi' ? 'पुनः बोलें' : 'Re-speak'}
+                    </button>
+                  )}
                   <button
                     type="submit"
-                    className="w-full min-h-[48px] py-3 px-4 rounded-xl bg-blue-900 text-white font-bold text-sm shadow-md hover:bg-blue-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
+                    className="flex-1 min-h-[48px] py-3 px-4 rounded-xl bg-blue-900 text-white font-bold text-sm shadow-md hover:bg-blue-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
                   >
-                    {language === 'hi' ? 'विवरण की समीक्षा करें →' : 'Review & Confirm →'}
+                    {language === 'hi' ? 'समीक्षा और पुष्टि करें →' : 'Review & Confirm →'}
                   </button>
                 </div>
               </form>
             )}
 
-            {/* Modal Body: Step 2 - Review & Confirm Step */}
-            {activeModal === 'manual' && step === 'review' && (
+            {/* Modal Body: Step 2 - Review & Confirm Step (Unified for Manual & Voice) */}
+            {((activeModal === 'manual' || activeModal === 'voice') && step === 'review') && (
               <div className="space-y-4">
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
                   {/* Type and Amount Header Banner */}
@@ -456,7 +791,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
                   </div>
                 </div>
 
-                {/* Micro-Enterprise Accounting Assurance Note */}
+                {/* Accounting Assurance Note */}
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2">
                   <CheckCircle2 className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
                   <p>
@@ -486,15 +821,36 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onAddTransaction, la
               </div>
             )}
 
-            {/* Modal Footer for Voice & Scan */}
-            {activeModal !== 'manual' && (
-              <button
-                type="button"
-                onClick={resetManualForm}
-                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl border border-slate-300 bg-slate-50 text-slate-700 font-semibold text-xs hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                {language === 'hi' ? 'बंद करें' : 'Close'}
-              </button>
+            {/* Modal Body: Scan Action Preview */}
+            {activeModal === 'scan' && (
+              <div className="py-6 text-center space-y-4">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-800 flex items-center justify-center mx-auto">
+                  <Camera className="w-8 h-8 text-emerald-700" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-slate-900">
+                    {language === 'hi' ? 'हाथ से लिखे पर्चे की तस्वीर लें' : 'Photograph Handwritten Paper Chit'}
+                  </p>
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                    {language === 'hi'
+                      ? 'दुकानदार या कारीगर की कच्ची पर्ची, उधारी नोट या बही-खाता पन्ना'
+                      : 'Take a clear photo of torn paper chits, raw receipts, or bahi-khata tallies'}
+                  </p>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 text-left">
+                  <b>{language === 'hi' ? 'प्रोटोटाइप सूचना:' : 'Prototype Milestone:'}</b>{' '}
+                  {language === 'hi'
+                    ? 'कैमरा OCR और विज़न पाइपलाइन आगामी विकास चरण में जोड़ी जाएगी।'
+                    : 'The camera OCR document extraction pipeline will be hooked directly in the upcoming milestone.'}
+                </div>
+                <button
+                  type="button"
+                  onClick={resetManualForm}
+                  className="w-full min-h-[44px] py-2.5 px-4 rounded-xl border border-slate-300 bg-slate-50 text-slate-700 font-semibold text-xs hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  {language === 'hi' ? 'बंद करें' : 'Close'}
+                </button>
+              </div>
             )}
           </div>
         </div>

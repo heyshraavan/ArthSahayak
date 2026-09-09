@@ -59,3 +59,17 @@ export type NavigationTab = 'dashboard' | 'ledger' | 'appraisal' | 'schemes';
 
 export type CalculationStatus = 'loading' | 'success' | 'error' | 'demo';
 export type CalculationDataSource = 'backend' | 'demo' | null;
+
+export type VoiceUIState = 'idle' | 'recording' | 'processing' | 'extracted' | 'error';
+
+export interface TranscriptionResponse {
+  transcript: string;
+  confidence?: number | null;
+}
+
+export interface VoiceExtractionResponse {
+  transcript: string;
+  suggested_transaction: BackendTransaction;
+  requires_confirmation: boolean;
+}
+

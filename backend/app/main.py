@@ -1,8 +1,22 @@
-from fastapi import FastAPI
+import base64
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
 
 from app.finance_engine import compute_financial_summary
-from app.schemas import FinanceCalculationRequest, FinancialSummary
+from app.schemas import (
+    AudioTranscriptionRequest,
+    ExtractionRequest,
+    FinanceCalculationRequest,
+    FinancialSummary,
+    TranscriptionResponse,
+    VoiceExtractionResponse,
+)
+from app.voice_engine import (
+    StubExtractionProvider,
+    StubTranscriptionProvider,
+    validate_suggested_transaction,
+)
 
 app = FastAPI(
     title="ArthSahayak API",
@@ -24,6 +38,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Default stub providers for testing interface boundaries and UI flows
+transcription_provider = StubTranscriptionProvider()
+extraction_provider = StubExtractionProvider()
 
 
 @app.get("/health")
@@ -43,4 +60,49 @@ def calculate_finance(request: FinanceCalculationRequest) -> FinancialSummary:
         net_operating_income=request.net_operating_income,
         debt_service=request.debt_service,
     )
+
+
+@app.post("/voice/transcribe", response_model=TranscriptionResponse)
+def transcribe_audio(request: AudioTranscriptionRequest) -> TranscriptionResponse:
+    """Transcribe audio data through the transcription provider abstraction."""
+    try:
+        audio_bytes = base64.b64decode(request.audio_base64)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid base64 audio data: {e}",
+        )
+
+    transcript = transcription_provider.transcribe(
+        audio_data=audio_bytes,
+        mime_type=request.mime_type or "audio/webm",
+    )
+    return TranscriptionResponse(transcript=transcript, confidence=0.95)
+
+
+@app.post("/voice/extract", response_model=VoiceExtractionResponse)
+def extract_transaction(request: ExtractionRequest) -> VoiceExtractionResponse:
+    """Extract structured transaction suggestion from speech transcript.
+
+    TREATS AI OUTPUT AS UNTRUSTED INPUT:
+    Validates raw dictionary strictly through Pydantic. Invalid categories,
+    negative amounts, or malformed fields are rejected with HTTP 422.
+
+    GUARANTEE: Does NOT write to ledger state and does NOT call the finance engine.
+    """
+    raw_suggestion = extraction_provider.extract(request.transcript)
+    try:
+        validated_tx = validate_suggested_transaction(raw_suggestion)
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"AI extraction produced invalid transaction data: {e.errors()}",
+        )
+
+    return VoiceExtractionResponse(
+        transcript=request.transcript,
+        suggested_transaction=validated_tx,
+        requires_confirmation=True,
+    )
+
 

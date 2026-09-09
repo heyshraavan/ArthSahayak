@@ -101,3 +101,101 @@ export async function checkHealth(): Promise<{ status: string; service: string }
   }
   return response.json();
 }
+
+/**
+ * Transcribe audio payload through the backend transcription endpoint.
+ * Calls POST /voice/transcribe.
+ */
+export async function transcribeAudio(
+  audioBase64: string,
+  mimeType = 'audio/webm'
+): Promise<{ transcript: string; confidence?: number | null }> {
+  const url = `${API_BASE_URL}/voice/transcribe`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        audio_base64: audioBase64,
+        mime_type: mimeType,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Transcription server error (${response.status})`;
+      try {
+        const errJson = await response.json();
+        if (errJson?.detail) {
+          errorMessage = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+        }
+      } catch {
+        // non-json response
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+
+    return await response.json();
+  } catch (err: unknown) {
+    if (err instanceof ApiError) throw err;
+    const message = err instanceof Error ? err.message : 'Unknown transcription error';
+    throw new ApiError(`Failed to transcribe audio: ${message}`);
+  }
+}
+
+/**
+ * Extract structured transaction suggestion from transcribed text.
+ * Calls POST /voice/extract.
+ *
+ * NOTE: The returned suggestion is UNTRUSTED AI OUTPUT and requires human verification.
+ */
+export async function extractVoiceTransaction(
+  transcript: string
+): Promise<{
+  transcript: string;
+  suggested_transaction: {
+    date: string;
+    party_name: string;
+    item: string;
+    amount: number;
+    tx_type: 'credit' | 'debit';
+    category?: string | null;
+  };
+  requires_confirmation: boolean;
+}> {
+  const url = `${API_BASE_URL}/voice/extract`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ transcript }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Extraction error (${response.status})`;
+      try {
+        const errJson = await response.json();
+        if (errJson?.detail) {
+          errorMessage = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+        }
+      } catch {
+        // non-json
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+
+    return await response.json();
+  } catch (err: unknown) {
+    if (err instanceof ApiError) throw err;
+    const message = err instanceof Error ? err.message : 'Unknown extraction error';
+    throw new ApiError(`Failed to extract transaction from voice: ${message}`);
+  }
+}
+

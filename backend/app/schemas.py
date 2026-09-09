@@ -83,3 +83,38 @@ class FinanceCalculationRequest(BaseModel):
         description="Total annual debt service obligations. Must be non-negative.",
     )
 
+
+class AudioTranscriptionRequest(BaseModel):
+    """Payload for audio transcription."""
+
+    audio_base64: str = Field(..., min_length=1, description="Base64-encoded audio bytes")
+    mime_type: Optional[str] = Field(default="audio/webm", description="MIME type of audio")
+
+
+class TranscriptionResponse(BaseModel):
+    """Response containing transcribed speech text."""
+
+    transcript: str = Field(..., description="Transcribed speech text")
+    confidence: Optional[float] = Field(default=None, description="Confidence score")
+
+
+class ExtractionRequest(BaseModel):
+    """Payload for structured extraction from transcribed text."""
+
+    transcript: str = Field(..., min_length=1, description="Transcribed speech text of the transaction")
+
+
+class VoiceExtractionResponse(BaseModel):
+    """Response containing an untrusted AI suggested transaction requiring human review."""
+
+    transcript: str = Field(..., description="Original voice transcript text")
+    suggested_transaction: Transaction = Field(
+        ...,
+        description="AI suggested transaction requiring human verification before adding to ledger",
+    )
+    requires_confirmation: bool = Field(
+        default=True,
+        description="Guarantees explicit human confirmation before saving to ledger",
+    )
+
+
