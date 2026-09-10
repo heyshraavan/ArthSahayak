@@ -175,7 +175,7 @@ export const SchemesPage: React.FC<SchemesPageProps> = ({ language, initialProfi
         {/* Expandable editor controls for live deterministic testing */}
         {showProfileEditor && (
           <div className="pt-2 border-t border-blue-200/80 space-y-3">
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
                   {language === 'hi' ? 'उद्यम का प्रकार:' : 'Enterprise Stage:'}
@@ -239,15 +239,15 @@ export const SchemesPage: React.FC<SchemesPageProps> = ({ language, initialProfi
             </div>
 
             {/* Demonstrable 5-Year Cooldown Toggle */}
-            <div className="p-2 bg-white rounded-lg border border-blue-200">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="p-2.5 bg-white rounded-lg border border-blue-200">
+              <label className="flex items-start sm:items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={Boolean(profile.hasAvailedMudraPmegpSvanidhiLast5Years)}
                   onChange={(e) =>
                     setProfile((p) => ({ ...p, hasAvailedMudraPmegpSvanidhiLast5Years: e.target.checked }))
                   }
-                  className="rounded border-slate-300 text-blue-900 focus:ring-blue-600"
+                  className="mt-0.5 sm:mt-0 rounded border-slate-300 text-blue-900 focus:ring-blue-600 shrink-0"
                 />
                 <span className="text-xs font-bold text-slate-800">
                   {language === 'hi'
@@ -263,25 +263,25 @@ export const SchemesPage: React.FC<SchemesPageProps> = ({ language, initialProfi
             </div>
 
             {/* Street vendor and SHG member checkboxes */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <label className="flex items-center gap-1.5 cursor-pointer bg-white p-2 rounded border border-blue-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer bg-white p-2 rounded border border-blue-200">
                 <input
                   type="checkbox"
                   checked={Boolean(profile.isStreetVendor)}
                   onChange={(e) => setProfile((p) => ({ ...p, isStreetVendor: e.target.checked }))}
-                  className="rounded border-slate-300 text-blue-900"
+                  className="rounded border-slate-300 text-blue-900 shrink-0"
                 />
                 <span className="text-[11px] font-medium text-slate-800">
                   {language === 'hi' ? 'स्ट्रीट वेंडर / रेहड़ी-पटरी' : 'Street Vendor / Hawker'}
                 </span>
               </label>
 
-              <label className="flex items-center gap-1.5 cursor-pointer bg-white p-2 rounded border border-blue-200">
+              <label className="flex items-center gap-2 cursor-pointer bg-white p-2 rounded border border-blue-200">
                 <input
                   type="checkbox"
                   checked={Boolean(profile.isShgMember)}
                   onChange={(e) => setProfile((p) => ({ ...p, isShgMember: e.target.checked }))}
-                  className="rounded border-slate-300 text-blue-900"
+                  className="rounded border-slate-300 text-blue-900 shrink-0"
                 />
                 <span className="text-[11px] font-medium text-slate-800">
                   {language === 'hi' ? 'महिला SHG सदस्य (2+ वर्ष)' : 'Women SHG Member (2+ yr)'}
@@ -292,8 +292,8 @@ export const SchemesPage: React.FC<SchemesPageProps> = ({ language, initialProfi
         )}
       </section>
 
-      {/* Scheme Cards List */}
-      <div className="space-y-3">
+      {/* Scheme Cards Grid: Responsive 2 columns on tablet and desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 items-start">
         {filteredSchemes.map((scheme) => {
           const isExpanded = expandedSchemeId === scheme.schemeId;
           const isEligible = scheme.status === 'eligible';

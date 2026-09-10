@@ -685,21 +685,21 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       </h2>
 
       {/* 3 Large Touch Target Buttons */}
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
         {/* Action 1: Speak Transaction */}
         <button
           type="button"
           onClick={handleStartVoiceModal}
-          className="min-h-[76px] flex flex-col items-center justify-center p-2.5 rounded-xl border border-blue-200 bg-blue-900 text-white shadow-xs hover:bg-blue-800 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
+          className="min-h-[72px] sm:min-h-[76px] flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl border border-blue-200 bg-blue-900 text-white shadow-xs hover:bg-blue-800 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
           aria-label={language === 'hi' ? 'बोलकर लेनदेन जोड़ें' : 'Speak Transaction'}
         >
-          <div className="p-1.5 rounded-full bg-blue-800 text-blue-100">
-            <Mic className="w-5 h-5" aria-hidden="true" />
+          <div className="p-1 sm:p-1.5 rounded-full bg-blue-800 text-blue-100">
+            <Mic className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
           </div>
-          <span className="text-xs font-bold mt-1 tracking-tight text-center">
+          <span className="text-[11px] sm:text-xs font-bold mt-1 tracking-tight text-center leading-tight">
             {language === 'hi' ? 'बोलकर जोड़ें' : 'Speak'}
           </span>
-          <span className="text-[10px] text-blue-200">
+          <span className="text-[9px] sm:text-[10px] text-blue-200 leading-tight mt-0.5">
             {language === 'hi' ? 'आवाज से' : 'Voice Input'}
           </span>
         </button>
@@ -708,16 +708,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         <button
           type="button"
           onClick={handleStartScanModal}
-          className="min-h-[76px] flex flex-col items-center justify-center p-2.5 rounded-xl border border-emerald-300 bg-emerald-700 text-white shadow-xs hover:bg-emerald-800 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600"
+          className="min-h-[72px] sm:min-h-[76px] flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl border border-emerald-300 bg-emerald-700 text-white shadow-xs hover:bg-emerald-800 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600"
           aria-label={language === 'hi' ? 'बही-खाता या पर्ची स्कैन करें' : 'Scan Chit or Ledger'}
         >
-          <div className="p-1.5 rounded-full bg-emerald-800 text-emerald-100">
-            <Camera className="w-5 h-5" aria-hidden="true" />
+          <div className="p-1 sm:p-1.5 rounded-full bg-emerald-800 text-emerald-100">
+            <Camera className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
           </div>
-          <span className="text-xs font-bold mt-1 tracking-tight text-center">
+          <span className="text-[11px] sm:text-xs font-bold mt-1 tracking-tight text-center leading-tight">
             {language === 'hi' ? 'पर्ची स्कैन' : 'Scan Chit'}
           </span>
-          <span className="text-[10px] text-emerald-100">
+          <span className="text-[9px] sm:text-[10px] text-emerald-100 leading-tight mt-0.5">
             {language === 'hi' ? 'फोटो खींचें' : 'Camera OCR'}
           </span>
         </button>
@@ -730,16 +730,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             setStep('input');
             setActiveModal('manual');
           }}
-          className="min-h-[76px] flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 shadow-xs hover:bg-slate-50 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-600"
+          className="min-h-[72px] sm:min-h-[76px] flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 shadow-xs hover:bg-slate-50 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-600"
           aria-label={language === 'hi' ? 'हाथ से लेनदेन लिखें' : 'Add Manual Transaction'}
         >
-          <div className="p-1.5 rounded-full bg-slate-100 text-slate-700">
-            <Plus className="w-5 h-5" aria-hidden="true" />
+          <div className="p-1 sm:p-1.5 rounded-full bg-slate-100 text-slate-700">
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
           </div>
-          <span className="text-xs font-bold mt-1 tracking-tight text-center">
+          <span className="text-[11px] sm:text-xs font-bold mt-1 tracking-tight text-center leading-tight">
             {language === 'hi' ? 'लिखकर जोड़ें' : 'Add Manual'}
           </span>
-          <span className="text-[10px] text-slate-500">
+          <span className="text-[9px] sm:text-[10px] text-slate-500 leading-tight mt-0.5">
             {language === 'hi' ? 'फॉर्म भरें' : 'Form Entry'}
           </span>
         </button>

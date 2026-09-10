@@ -35,7 +35,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, la
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 shadow-lg safe-bottom"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 shadow-lg safe-bottom"
       aria-label="Main Navigation"
     >
       <div className="max-w-lg mx-auto flex items-center justify-around px-2 py-1">

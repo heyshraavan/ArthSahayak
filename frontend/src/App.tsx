@@ -262,7 +262,7 @@ export function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
         <Navbar currentLanguage={language} onLanguageToggle={toggleLanguage} />
-        <main className="flex-1 max-w-lg w-full mx-auto px-3.5 py-16 flex flex-col items-center justify-center text-center">
+        <main className="flex-1 w-full max-w-lg md:max-w-2xl mx-auto px-3.5 sm:px-6 py-16 flex flex-col items-center justify-center text-center">
           <div className="w-10 h-10 border-3 border-blue-900 border-t-transparent rounded-full animate-spin mb-4" />
           <p className="text-sm font-bold text-slate-800">
             {language === 'hi' ? 'बही-खाता लोड हो रहा है...' : 'Loading ledger...'}
@@ -278,10 +278,15 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Top Application Bar */}
-      <Navbar currentLanguage={language} onLanguageToggle={toggleLanguage} />
+      <Navbar
+        currentLanguage={language}
+        onLanguageToggle={toggleLanguage}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
-      {/* Main Mobile-First Content Container */}
-      <main className="flex-1 max-w-lg w-full mx-auto px-3.5 py-3.5 pb-24">
+      {/* Main Responsive Content Container */}
+      <main className="flex-1 w-full max-w-lg md:max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto px-3.5 sm:px-6 py-3.5 md:py-6 pb-24 md:pb-12">
         {/* Persistence Error Alert (if IndexedDB write failed) */}
         {persistenceError && (
           <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start justify-between gap-2">

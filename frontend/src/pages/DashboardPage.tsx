@@ -83,34 +83,40 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </section>
 
-      {/* Primary Actions: Speak, Scan Chit, Add Manual */}
-      <QuickActions
-        onAddTransaction={onAddTransaction}
-        onAddTransactions={onAddTransactions}
-        language={language}
-        activeReviewItem={activeReviewItem}
-        onCompleteReview={onCompleteReview}
-        onDiscardReview={onDiscardReview}
-        onDismissReview={onDismissReview}
-      />
+      {/* Responsive 2-column layout at lg breakpoint */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
+        {/* Left / Primary Column (7 cols): Financial Health & RBI Norms */}
+        <div className="lg:col-span-7 space-y-4">
+          <FinancialMetricCards
+            summary={financialSummary}
+            status={calculationStatus}
+            dataSource={dataSource}
+            errorMessage={errorMessage}
+            onRetry={onRetryCalculation}
+            onUseDemoFallback={onUseDemoFallback}
+            language={language}
+          />
+        </div>
 
-      {/* Financial Health Metrics (API-driven / Loading / Error / Verified Engine Indicator) */}
-      <FinancialMetricCards
-        summary={financialSummary}
-        status={calculationStatus}
-        dataSource={dataSource}
-        errorMessage={errorMessage}
-        onRetry={onRetryCalculation}
-        onUseDemoFallback={onUseDemoFallback}
-        language={language}
-      />
+        {/* Right / Secondary Column (5 cols): Actions & Ledger Activity */}
+        <div className="lg:col-span-5 space-y-4">
+          <QuickActions
+            onAddTransaction={onAddTransaction}
+            onAddTransactions={onAddTransactions}
+            language={language}
+            activeReviewItem={activeReviewItem}
+            onCompleteReview={onCompleteReview}
+            onDiscardReview={onDiscardReview}
+            onDismissReview={onDismissReview}
+          />
 
-      {/* Recent Transactions List */}
-      <RecentTransactions
-        transactions={transactions}
-        language={language}
-        onDeleteTransaction={onDeleteTransaction}
-      />
+          <RecentTransactions
+            transactions={transactions}
+            language={language}
+            onDeleteTransaction={onDeleteTransaction}
+          />
+        </div>
+      </div>
     </div>
   );
 };

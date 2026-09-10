@@ -1,17 +1,48 @@
 import React from 'react';
-import { Globe, Wifi } from 'lucide-react';
+import { BookOpen, FileText, Globe, Home, Sparkles, Wifi } from 'lucide-react';
+import type { NavigationTab } from '../types';
 
 interface NavbarProps {
   currentLanguage: 'en' | 'hi';
   onLanguageToggle: () => void;
+  activeTab?: NavigationTab;
+  onTabChange?: (tab: NavigationTab) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentLanguage, onLanguageToggle }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  currentLanguage,
+  onLanguageToggle,
+  activeTab,
+  onTabChange,
+}) => {
+  const tabs = [
+    {
+      id: 'dashboard' as NavigationTab,
+      label: currentLanguage === 'hi' ? 'मुख्य' : 'Home',
+      icon: Home,
+    },
+    {
+      id: 'ledger' as NavigationTab,
+      label: currentLanguage === 'hi' ? 'खाता बही' : 'Ledger',
+      icon: BookOpen,
+    },
+    {
+      id: 'appraisal' as NavigationTab,
+      label: currentLanguage === 'hi' ? 'बैंक रिपोर्ट' : 'Appraisal',
+      icon: FileText,
+    },
+    {
+      id: 'schemes' as NavigationTab,
+      label: currentLanguage === 'hi' ? 'योजनाएं' : 'Schemes',
+      icon: Sparkles,
+    },
+  ];
+
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 py-3 shadow-xs">
-      <div className="max-w-lg mx-auto flex items-center justify-between">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 sm:px-6 py-3 shadow-xs">
+      <div className="w-full max-w-lg md:max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Brand identity */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           <img
             src="/logo.png"
             alt="ArthSahayak Logo"
@@ -25,14 +56,40 @@ export const Navbar: React.FC<NavbarProps> = ({ currentLanguage, onLanguageToggl
                 PWA
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
+            <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
               {currentLanguage === 'hi' ? 'ग्रामीण व्यवसाय वित्तीय सहायक' : 'Rural Financial Assistant'}
             </p>
           </div>
         </div>
 
+        {/* Desktop Navigation Links */}
+        {activeTab && onTabChange && (
+          <nav className="hidden md:flex items-center gap-1.5" aria-label="Desktop Navigation">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => onTabChange(tab.id)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    isActive
+                      ? 'bg-blue-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
+
         {/* Right tools: Language selector & network indicator */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={onLanguageToggle}

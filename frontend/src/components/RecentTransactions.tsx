@@ -55,7 +55,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           role="tab"
           aria-selected={filter === 'all'}
           onClick={() => setFilter('all')}
-          className={`flex-1 py-1.5 px-3 rounded-md transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 px-1.5 sm:px-3 text-center rounded-md transition-all cursor-pointer ${
             filter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -66,7 +66,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           role="tab"
           aria-selected={filter === 'credit'}
           onClick={() => setFilter('credit')}
-          className={`flex-1 py-1.5 px-3 rounded-md transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 px-1.5 sm:px-3 text-center rounded-md transition-all cursor-pointer ${
             filter === 'credit' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -77,7 +77,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           role="tab"
           aria-selected={filter === 'debit'}
           onClick={() => setFilter('debit')}
-          className={`flex-1 py-1.5 px-3 rounded-md transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 px-1.5 sm:px-3 text-center rounded-md transition-all cursor-pointer ${
             filter === 'debit' ? 'bg-white text-rose-800 shadow-xs' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
