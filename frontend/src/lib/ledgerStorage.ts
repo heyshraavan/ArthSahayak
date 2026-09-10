@@ -75,8 +75,16 @@ export async function loadTransactions(): Promise<Transaction[]> {
 
     request.onsuccess = () => {
       const results = (request.result || []) as Transaction[];
-      // Sort newest to oldest: compare ISO date string descending
-      results.sort((a, b) => b.date.localeCompare(a.date));
+      // Sort newest to oldest: compare ISO date string descending defensively
+      try {
+        results.sort((a, b) => {
+          const dateB = String(b?.date ?? '');
+          const dateA = String(a?.date ?? '');
+          return dateB.localeCompare(dateA);
+        });
+      } catch (sortErr) {
+        console.warn('Non-fatal warning: Error sorting transactions in loadTransactions:', sortErr);
+      }
       resolve(results);
     };
 

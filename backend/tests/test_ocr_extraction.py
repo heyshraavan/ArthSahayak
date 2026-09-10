@@ -44,6 +44,7 @@ from app.services.ocr import (
     OcrValidationError,
     StubOcrProvider,
     get_ocr_provider,
+    normalize_ocr_date,
     validate_image_payload,
 )
 
@@ -947,3 +948,121 @@ def test_stub_ocr_provider_scenarios():
     # Empty transaction list
     res_empty = provider.extract_from_image(b"test:empty_transactions", "image/jpeg")
     assert res_empty["transactions"] == []
+
+
+# --- 13. Date Normalization & Strict Human Review Invariant Tests ---
+
+def test_normalize_ocr_date_dd_mm_yyyy_to_canonical_iso():
+    """Verify DD-MM-YYYY format is converted to canonical YYYY-MM-DD."""
+    assert normalize_ocr_date("22-05-2007") == "2007-05-22"
+    assert normalize_ocr_date("2-5-2007") == "2007-05-02"
+    assert normalize_ocr_date("02-05-2007") == "2007-05-02"
+
+
+def test_normalize_ocr_date_dd_slash_yyyy_to_canonical_iso():
+    """Verify DD/MM/YYYY format is converted to canonical YYYY-MM-DD."""
+    assert normalize_ocr_date("22/05/2007") == "2007-05-22"
+    assert normalize_ocr_date("2/5/2007") == "2007-05-02"
+
+
+def test_normalize_ocr_date_dd_dot_yyyy_to_canonical_iso():
+    """Verify DD.MM.YYYY format is converted to canonical YYYY-MM-DD."""
+    assert normalize_ocr_date("22.05.2007") == "2007-05-22"
+
+
+def test_normalize_ocr_date_canonical_iso_remains_unchanged():
+    """Verify canonical YYYY-MM-DD remains unchanged."""
+    assert normalize_ocr_date("2007-05-22") == "2007-05-22"
+    assert normalize_ocr_date("2026-09-08") == "2026-09-08"
+    assert normalize_ocr_date("2007/05/22") == "2007-05-22"
+
+
+def test_normalize_ocr_date_datetime_date_object():
+    """Verify date object input converts to canonical ISO string."""
+    assert normalize_ocr_date(date(2007, 5, 22)) == "2007-05-22"
+
+
+def test_normalize_ocr_date_invalid_calendar_dates_rejected():
+    """Verify invalid calendar dates (e.g. Feb 31, non-leap year Feb 29, month 13) return None."""
+    assert normalize_ocr_date("31-02-2007") is None  # Feb 31 does not exist
+    assert normalize_ocr_date("29-02-2007") is None  # 2007 not a leap year
+    assert normalize_ocr_date("29-02-2008") == "2008-02-29"  # 2008 IS a leap year
+    assert normalize_ocr_date("32-05-2007") is None  # Day 32
+    assert normalize_ocr_date("22-13-2007") is None  # Month 13
+    assert normalize_ocr_date("00-05-2007") is None  # Day 0
+
+
+def test_normalize_ocr_date_ambiguous_two_digit_years_rejected():
+    """Verify 2-digit years return None to prevent guessing centuries."""
+    assert normalize_ocr_date("22/05/07") is None
+    assert normalize_ocr_date("22-05-07") is None
+    assert normalize_ocr_date("07-05-22") is None
+
+
+def test_normalize_ocr_date_malformed_text_returns_none():
+    """Verify malformed text or unparseable input returns None."""
+    assert normalize_ocr_date("bad-date-format") is None
+    assert normalize_ocr_date("yesterday") is None
+    assert normalize_ocr_date("") is None
+    assert normalize_ocr_date("   ") is None
+    assert normalize_ocr_date(None) is None
+
+
+def test_gemini_vision_ocr_normalizes_extracted_dates():
+    """Verify GeminiOcrProvider normalizes non-ISO dates extracted from images."""
+    mock_genai_client = MagicMock()
+    mock_response = MagicMock()
+
+    mock_batch = GeminiOcrBatchExtraction(
+        is_identity_document=False,
+        transactions=[
+            GeminiOcrTransactionItem(
+                date="22-05-2007",
+                party_name="Hotel Swad",
+                item="Meal Bill",
+                amount=146.0,
+                tx_type="debit",
+                category="operating_expense",
+            )
+        ],
+        raw_text="होटल स्वाद - 22-05-2007 - ₹146",
+    )
+    mock_response.parsed = mock_batch
+    mock_response.text = json.dumps(mock_batch.model_dump())
+    mock_genai_client.models.generate_content.return_value = mock_response
+
+    provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client)
+    result = provider.extract_from_image(b"fake_receipt_bytes", mime_type="image/jpeg")
+
+    # Extracted date must be normalized to canonical YYYY-MM-DD
+    assert result["transactions"][0]["date"] == "2007-05-22"
+    # Pydantic validation must succeed with valid date object
+    validated = Transaction.model_validate(result["transactions"][0])
+    assert validated.date == date(2007, 5, 22)
+    assert validated.amount == 146.0
+
+
+def test_ocr_extract_endpoint_normalizes_dd_mm_yyyy_date():
+    """Verify POST /ocr/extract endpoint returns canonical 2007-05-22 date from 22-05-2007 stub."""
+    b64_img = base64.b64encode(b"test:date_dd_mm_yyyy").decode("utf-8")
+    response = client.post("/ocr/extract", json={"image_base64": b64_img})
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["suggested_transactions"]) == 1
+    assert data["suggested_transactions"][0]["date"] == "2007-05-22"
+    assert data["suggested_transactions"][0]["amount"] == 146.0
+    assert data["suggested_transactions"][0]["party_name"] == "Hotel Swad"
+    assert data["suggested_transactions"][0]["tx_type"] == "debit"
+    assert data["suggested_transactions"][0]["category"] == "operating_expense"
+
+
+def test_ocr_extract_endpoint_normalizes_dd_slash_yyyy_date():
+    """Verify POST /ocr/extract endpoint returns canonical 2007-05-22 date from 22/05/2007 stub."""
+    b64_img = base64.b64encode(b"test:date_dd_slash_yyyy").decode("utf-8")
+    response = client.post("/ocr/extract", json={"image_base64": b64_img})
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["suggested_transactions"]) == 1
+    assert data["suggested_transactions"][0]["date"] == "2007-05-22"
+    assert data["suggested_transactions"][0]["amount"] == 146.0
+

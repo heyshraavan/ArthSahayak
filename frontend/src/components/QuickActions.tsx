@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { getCategoryInfo, TRANSACTION_CATEGORIES } from '../lib/categories';
+import { normalizeDateString } from '../lib/dateUtils';
 import { extractOcrTransactions } from '../services/api';
 import { BackendExtractionProvider } from '../services/extraction';
 import { BackendTranscriptionProvider } from '../services/transcription';
@@ -179,16 +180,21 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       const response = await extractOcrTransactions(ocrImageBase64, ocrImageMime);
       setOcrRawText(response.raw_text || null);
 
-      const items: EditableOcrTransaction[] = (response.suggested_transactions || []).map((tx, idx) => ({
-        id: `ocr-tx-${Date.now()}-${idx}`,
-        date: tx.date || new Date().toISOString().split('T')[0],
-        party_name: tx.party_name || '',
-        item: tx.item || '',
-        amount: tx.amount ? String(tx.amount) : '',
-        tx_type: tx.tx_type || 'debit',
-        category: (tx.category as TransactionCategory) || (tx.tx_type === 'credit' ? 'sales' : 'raw_material'),
-        error: null,
-      }));
+      const items: EditableOcrTransaction[] = (response.suggested_transactions || []).map((tx, idx) => {
+        const normalizedDate = normalizeDateString(tx.date);
+        return {
+          id: `ocr-tx-${Date.now()}-${idx}`,
+          date: normalizedDate || '',
+          party_name: tx.party_name || '',
+          item: tx.item || '',
+          amount: tx.amount ? String(tx.amount) : '',
+          tx_type: tx.tx_type || 'debit',
+          category: (tx.category as TransactionCategory) || (tx.tx_type === 'credit' ? 'sales' : 'raw_material'),
+          error: !normalizedDate
+            ? (language === 'hi' ? 'तारीख की पुष्टि करें (YYYY-MM-DD)' : 'Please verify date (YYYY-MM-DD)')
+            : null,
+        };
+      });
 
       if (items.length === 0) {
         setOcrError(
@@ -240,6 +246,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     const updatedList = ocrTransactions.map((tx) => {
       const numAmount = parseFloat(tx.amount);
       let error: string | null = null;
+      const normalizedDate = normalizeDateString(tx.date);
+
       if (isNaN(numAmount) || numAmount <= 0) {
         error = language === 'hi' ? 'मान्य राशि (> 0) दर्ज करें' : 'Valid positive amount required.';
         hasError = true;
@@ -249,11 +257,11 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       } else if (!tx.item.trim()) {
         error = language === 'hi' ? 'सामान का विवरण आवश्यक है' : 'Item description is required.';
         hasError = true;
-      } else if (!tx.date) {
-        error = language === 'hi' ? 'तारीख आवश्यक है' : 'Date is required.';
+      } else if (!normalizedDate) {
+        error = language === 'hi' ? 'मान्य तारीख (YYYY-MM-DD) आवश्यक है' : 'Valid date (YYYY-MM-DD) is required.';
         hasError = true;
       }
-      return { ...tx, error };
+      return { ...tx, date: normalizedDate || tx.date, error };
     });
 
     if (hasError) {
@@ -269,8 +277,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     setIsSaving(true);
 
     try {
-      const confirmedTxs = ocrTransactions.map((tx) => ({
-        date: tx.date.trim(),
+      const confirmedTxs = updatedList.map((tx) => ({
+        date: normalizeDateString(tx.date)!,
         party_name: tx.party_name.trim(),
         item: tx.item.trim(),
         amount: parseFloat(tx.amount),
@@ -414,7 +422,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     tx_type: TransactionType;
     category?: string | null;
   }) => {
-    setDate(tx.date || new Date().toISOString().split('T')[0]);
+    const normalizedDate = normalizeDateString(tx.date);
+    setDate(normalizedDate || new Date().toISOString().split('T')[0]);
     setPartyName(tx.party_name || '');
     setItem(tx.item || '');
     setAmount(String(tx.amount || ''));
@@ -440,10 +449,12 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       setFormError(language === 'hi' ? 'कृपया मान्य राशि (> 0) दर्ज करें' : 'Please enter a valid positive amount.');
       return;
     }
-    if (!date) {
-      setFormError(language === 'hi' ? 'कृपया मान्य तारीख चुनें' : 'Please select a valid date.');
+    const normalized = normalizeDateString(date);
+    if (!normalized) {
+      setFormError(language === 'hi' ? 'कृपया मान्य तारीख (YYYY-MM-DD) चुनें' : 'Please select a valid date (YYYY-MM-DD).');
       return;
     }
+    setDate(normalized);
 
     setStep('review');
   };
@@ -457,9 +468,10 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     setFormError(null);
 
     try {
+      const normalizedDate = normalizeDateString(date) || date.trim();
       // Guaranteed Human Confirmation: Only explicit user click invokes onAddTransaction
       await onAddTransaction({
-        date: date.trim(),
+        date: normalizedDate,
         party_name: partyName.trim(),
         item: item.trim(),
         amount: numAmount,

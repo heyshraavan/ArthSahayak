@@ -74,6 +74,70 @@ def validate_image_payload(image_bytes: bytes, mime_type: str) -> None:
         )
 
 
+def normalize_ocr_date(raw_date: Optional[Any]) -> Optional[str]:
+    """Normalize raw OCR date string or date object to canonical YYYY-MM-DD format.
+
+    Enforces canonical 'YYYY-MM-DD' ISO date strings across OCR extraction.
+
+    Supports common formats:
+    - YYYY-MM-DD (canonical ISO format, returns unchanged)
+    - DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY
+    - YYYY/MM/DD, YYYY.MM.DD
+    - datetime.date objects
+
+    Invariants:
+    - Does NOT silently invent a date when a date cannot be confidently parsed.
+    - Ambiguous dates (e.g. 2-digit years) or invalid calendar dates (e.g. Feb 31, month 13)
+      return None so they can be rejected or surfaced for human correction.
+    """
+    if raw_date is None:
+        return None
+
+    if isinstance(raw_date, date):
+        return raw_date.strftime("%Y-%m-%d")
+
+    if not isinstance(raw_date, str):
+        return None
+
+    trimmed = raw_date.strip()
+    if not trimmed:
+        return None
+
+    # Strip timestamp component if present (e.g. "2007-05-22T00:00:00" or "2007-05-22 14:30")
+    date_part = re.split(r"[T ]", trimmed)[0].strip()
+
+    # Pattern 1: YYYY[-/. ]MM[-/. ]DD
+    iso_match = re.match(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$", date_part)
+    if iso_match:
+        year = int(iso_match.group(1))
+        month = int(iso_match.group(2))
+        day = int(iso_match.group(3))
+        if 1900 <= year <= 2100 and 1 <= month <= 12 and 1 <= day <= 31:
+            try:
+                valid_date = date(year, month, day)
+                return valid_date.strftime("%Y-%m-%d")
+            except ValueError:
+                return None
+        return None
+
+    # Pattern 2: DD[-/. ]MM[-/. ]YYYY
+    dmy_match = re.match(r"^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$", date_part)
+    if dmy_match:
+        day = int(dmy_match.group(1))
+        month = int(dmy_match.group(2))
+        year = int(dmy_match.group(3))
+        if 1900 <= year <= 2100 and 1 <= month <= 12 and 1 <= day <= 31:
+            try:
+                valid_date = date(year, month, day)
+                return valid_date.strftime("%Y-%m-%d")
+            except ValueError:
+                return None
+        return None
+
+    # Ambiguous (e.g. 2-digit years) or malformed: return None
+    return None
+
+
 class GeminiOcrTransactionItem(BaseModel):
     """Structured extraction for an individual transaction item from an image.
 
@@ -83,7 +147,7 @@ class GeminiOcrTransactionItem(BaseModel):
 
     date: Optional[str] = Field(
         default=None,
-        description="Transaction date in YYYY-MM-DD format if visible on the document. Null if unreadable or absent.",
+        description="Transaction date in YYYY-MM-DD or DD-MM-YYYY format if visible on the document. Null if unreadable or absent.",
     )
     party_name: Optional[str] = Field(
         default="Unknown Party",
@@ -352,8 +416,17 @@ class GeminiOcrProvider:
             else:
                 tx_dict = dict(tx)
 
-            # Date fallback to today if unstated on slip
-            if not tx_dict.get("date"):
+            # Date normalization and fallback
+            raw_tx_date = tx_dict.get("date")
+            if raw_tx_date is not None and str(raw_tx_date).strip() != "":
+                normalized = normalize_ocr_date(raw_tx_date)
+                if normalized:
+                    tx_dict["date"] = normalized
+                else:
+                    # Keep raw unparseable date string so Pydantic validation rejects it
+                    tx_dict["date"] = str(raw_tx_date).strip()
+            else:
+                # Date unstated on slip: default to today
                 tx_dict["date"] = date.today()
 
             formatted_transactions.append(tx_dict)
@@ -445,6 +518,38 @@ class StubOcrProvider:
             return {
                 "transactions": [],
                 "raw_text": "Blank page with no visible business transactions",
+            }
+
+        # Date normalization test scenario 1: DD-MM-YYYY (22-05-2007)
+        if image_bytes.startswith(b"test:date_dd_mm_yyyy"):
+            return {
+                "transactions": [
+                    {
+                        "date": normalize_ocr_date("22-05-2007"),
+                        "party_name": "Hotel Swad",
+                        "item": "Handwritten Meal Slip",
+                        "amount": 146.0,
+                        "tx_type": "debit",
+                        "category": "operating_expense",
+                    }
+                ],
+                "raw_text": "होटल स्वाद - 22-05-2007 - ₹146",
+            }
+
+        # Date normalization test scenario 2: DD/MM/YYYY (22/05/2007)
+        if image_bytes.startswith(b"test:date_dd_slash_yyyy"):
+            return {
+                "transactions": [
+                    {
+                        "date": normalize_ocr_date("22/05/2007"),
+                        "party_name": "Hotel Swad",
+                        "item": "Handwritten Meal Slip",
+                        "amount": 146.0,
+                        "tx_type": "debit",
+                        "category": "operating_expense",
+                    }
+                ],
+                "raw_text": "होटल स्वाद - 22/05/2007 - ₹146",
             }
 
         # Semantic test scenario 1: Restaurant expense receipt -> debit + operating_expense

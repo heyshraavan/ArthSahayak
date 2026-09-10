@@ -98,9 +98,8 @@ export function App() {
         const msg = err instanceof Error ? err.message : 'Local storage access failed';
         if (isMounted) {
           setPersistenceError(msg);
-          // In-memory fallback if IndexedDB is blocked
-          setTransactions(DEMO_TRANSACTIONS);
-          fetchBackendCalculation(DEMO_TRANSACTIONS);
+          // Do NOT overwrite user ledger with demo transactions on error
+          setTransactions([]);
         }
       } finally {
         if (isMounted) {
