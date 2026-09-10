@@ -145,8 +145,8 @@ export const FinancialMetricCards: React.FC<FinancialMetricCardsProps> = ({
             <ShieldCheck className="w-3.5 h-3.5 text-blue-700" aria-hidden="true" />
             <span>
               {language === 'hi'
-                ? 'डिवाइस पर गणना की गई (ऑफ़लाइन मोड)'
-                : 'Calculated On-Device (Offline Mode)'}
+                ? 'डिवाइस पर गणना की गई'
+                : 'Calculated On-Device'}
             </span>
           </span>
         )}

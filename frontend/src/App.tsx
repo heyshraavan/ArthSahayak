@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Sparkles, WifiOff } from 'lucide-react';
 import { BottomNav } from './components/BottomNav';
 import { Navbar } from './components/Navbar';
 import { useMediaSyncQueue } from './hooks/useMediaSyncQueue';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
 import {
   addTransaction,
   addTransactions,
@@ -33,6 +34,9 @@ import type {
 export function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [language, setLanguage] = useState<'en' | 'hi'>('en');
+
+  // Real browser connectivity state - strictly based on navigator.onLine & window events
+  const isOnline = useOnlineStatus();
 
   // Persistent Media Queue Sync Manager
   const {
@@ -261,7 +265,7 @@ export function App() {
   if (isLedgerLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-        <Navbar currentLanguage={language} onLanguageToggle={toggleLanguage} />
+        <Navbar currentLanguage={language} onLanguageToggle={toggleLanguage} isOnline={isOnline} />
         <main className="flex-1 w-full max-w-lg md:max-w-2xl mx-auto px-3.5 sm:px-6 py-16 flex flex-col items-center justify-center text-center">
           <div className="w-10 h-10 border-3 border-blue-900 border-t-transparent rounded-full animate-spin mb-4" />
           <p className="text-sm font-bold text-slate-800">
@@ -283,10 +287,34 @@ export function App() {
         onLanguageToggle={toggleLanguage}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        isOnline={isOnline}
       />
 
       {/* Main Responsive Content Container */}
       <main className="flex-1 w-full max-w-lg md:max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto px-3.5 sm:px-6 py-3.5 md:py-6 pb-24 md:pb-12">
+        {/* Offline Status Banner */}
+        {!isOnline && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-3 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between gap-2 shadow-2xs"
+          >
+            <div className="flex items-center gap-2">
+              <WifiOff className="w-4 h-4 text-amber-700 shrink-0" aria-hidden="true" />
+              <span>
+                <strong className="font-bold">
+                  {language === 'hi' ? 'ऑफ़लाइन मोड:' : 'Offline Mode:'}
+                </strong>{' '}
+                {language === 'hi'
+                  ? 'इंटरनेट कनेक्शन उपलब्ध नहीं है। खाता प्रविष्टियां सुरक्षित रूप से डिवाइस पर सहेजी जा रही हैं।'
+                  : 'You are currently offline. Transactions and calculations operate locally.'}
+              </span>
+            </div>
+            <span className="text-[11px] font-bold text-amber-800 bg-amber-200/70 px-2 py-0.5 rounded-md shrink-0">
+              {language === 'hi' ? 'ऑफ़लाइन' : 'Offline'}
+            </span>
+          </div>
+        )}
         {/* Persistence Error Alert (if IndexedDB write failed) */}
         {persistenceError && (
           <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start justify-between gap-2">
@@ -410,7 +438,12 @@ export function App() {
         )}
 
         {activeTab === 'appraisal' && (
-          <AppraisalPage financialSummary={financialSummary} language={language} />
+          <AppraisalPage
+            financialSummary={financialSummary}
+            language={language}
+            profile={profile}
+            transactions={transactions}
+          />
         )}
 
         {activeTab === 'schemes' && (

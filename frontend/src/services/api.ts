@@ -1,6 +1,11 @@
-import type { FinanceCalculationRequest, FinancialSummary, OcrExtractionResponse } from '../types';
+import type {
+  DossierInput,
+  FinanceCalculationRequest,
+  FinancialSummary,
+  OcrExtractionResponse,
+} from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'http://127.0.0.1:8000';
 
 export class ApiError extends Error {
   status?: number;
@@ -252,6 +257,62 @@ export async function extractOcrTransactions(
     const message = err instanceof Error ? err.message : 'Unknown network error';
     throw new ApiError(
       `Network Error: Failed to reach ArthSahayak OCR service (${message}). AI scanning requires an active connection.`,
+      0
+    );
+  }
+}
+
+/**
+ * Generate an audit-ready 2-page PDF Credit Appraisal Dossier.
+ * Calls POST /dossier/generate with structured financial & applicant data.
+ * Returns the PDF as a binary Blob.
+ */
+export async function generateDossier(input: DossierInput): Promise<Blob> {
+  const url = `${API_BASE_URL}/dossier/generate`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/pdf',
+      },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Dossier generation error (${response.status})`;
+      let detailMsg: string | null = null;
+      try {
+        const errJson = await response.json();
+        if (errJson?.detail) {
+          detailMsg = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+        }
+      } catch {
+        // non-json response
+      }
+
+      if (response.status === 422) {
+        errorMessage = detailMsg || 'Invalid data payload for credit dossier.';
+      } else if (response.status === 500) {
+        errorMessage = detailMsg || 'Server error generating PDF dossier. Please try again.';
+      } else if (detailMsg) {
+        errorMessage = detailMsg;
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/pdf')) {
+      throw new ApiError('Invalid response from server: expected PDF document', response.status);
+    }
+
+    return await response.blob();
+  } catch (err: unknown) {
+    if (err instanceof ApiError) throw err;
+    const message = err instanceof Error ? err.message : 'Unknown network error';
+    throw new ApiError(
+      `Network Error: Failed to reach ArthSahayak API (${message}). Ensure backend server is running at ${API_BASE_URL}.`,
       0
     );
   }

@@ -1,13 +1,74 @@
-import React from 'react';
-import { AlertCircle, CheckCircle2, Download, FileText, Landmark, ShieldCheck } from 'lucide-react';
-import type { FinancialSummary } from '../types';
+import React, { useState } from 'react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  FileText,
+  Landmark,
+  Loader2,
+  ShieldCheck,
+} from 'lucide-react';
+import { buildDossierPayload } from '../lib/dossierPayload';
+import { generateDossier } from '../services/api';
+import type { EntrepreneurProfile, FinancialSummary, Transaction } from '../types';
 
 interface AppraisalPageProps {
   financialSummary: FinancialSummary | null;
   language: 'en' | 'hi';
+  profile?: EntrepreneurProfile;
+  transactions?: Transaction[];
 }
 
-export const AppraisalPage: React.FC<AppraisalPageProps> = ({ financialSummary, language }) => {
+export const AppraisalPage: React.FC<AppraisalPageProps> = ({
+  financialSummary,
+  language,
+  profile,
+  transactions = [],
+}) => {
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [dossierError, setDossierError] = useState<string | null>(null);
+
+  const handleDownloadDossier = async () => {
+    if (!financialSummary) return;
+
+    // Check offline status before network request
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setDossierError(
+        language === 'hi'
+          ? 'आप वर्तमान में ऑफ़लाइन हैं। बैंक डॉसियर पीडीएफ डाउनलोड करने के लिए इंटरनेट कनेक्शन आवश्यक है।'
+          : 'You are currently offline. An active internet connection is required to generate the bank dossier PDF.'
+      );
+      return;
+    }
+
+    setIsGenerating(true);
+    setDossierError(null);
+
+    try {
+      const payload = buildDossierPayload({
+        financialSummary,
+        profile,
+        transactions,
+        language,
+      });
+
+      const blob = await generateDossier(payload);
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = 'ArthSahayak_Credit_Appraisal_Dossier.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate dossier PDF';
+      setDossierError(msg);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   if (!financialSummary) {
     return (
       <div className="bg-white border border-slate-200 rounded-xl p-6 text-center space-y-3">
@@ -67,17 +128,49 @@ export const AppraisalPage: React.FC<AppraisalPageProps> = ({ financialSummary, 
             </div>
           </div>
 
-          <div>
+          <div className="space-y-2">
             <button
               type="button"
-              onClick={() => alert(language === 'hi' ? 'बैकएंड ReportLab जनरेटर से डॉसियर डाउनलोड अगले चरण में सक्षम होगा।' : 'ReportLab 2-page PDF generation ready to hook to backend API endpoint.')}
-              className="w-full min-h-[48px] py-3 px-4 rounded-xl bg-blue-900 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md hover:bg-blue-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
+              onClick={handleDownloadDossier}
+              disabled={isGenerating}
+              className="w-full min-h-[48px] py-3 px-4 rounded-xl bg-blue-900 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md hover:bg-blue-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Download className="w-4 h-4" />
-              <span>
-                {language === 'hi' ? '2-पेज बैंक डॉसियर डाउनलोड करें (PDF)' : 'Download 2-Page Bank Dossier (PDF)'}
-              </span>
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>
+                    {language === 'hi' ? 'डॉसियर तैयार किया जा रहा है...' : 'Generating PDF...'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>
+                    {language === 'hi' ? '2-पेज बैंक डॉसियर डाउनलोड करें (PDF)' : 'Download 2-Page Bank Dossier (PDF)'}
+                  </span>
+                </>
+              )}
             </button>
+
+            {dossierError && (
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold">
+                    {language === 'hi' ? 'डॉसियर त्रुटि' : 'Dossier Download Error'}
+                  </p>
+                  <p className="text-rose-700 mt-0.5">{dossierError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDossierError(null)}
+                  className="text-rose-500 hover:text-rose-700 font-bold ml-1 cursor-pointer p-0.5"
+                  aria-label="Dismiss error"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
         </section>
 

@@ -124,3 +124,32 @@ export interface QueueStatusSummary {
 
 export * from './scheme';
 
+export interface SchemeRecommendation {
+  scheme_name: string;
+  sponsoring_agency?: string | null;
+  target_benefit?: string | null;
+  notes?: string | null;
+}
+
+export interface TransactionSnippet {
+  date: string;
+  party_name: string;
+  item: string;
+  amount: number;
+  tx_type: string;
+}
+
+export interface DossierInput {
+  applicant_name?: string | null;
+  business_name?: string | null;
+  business_type?: string | null;
+  assessment_date?: string | null;
+  financial_period?: string | null;
+  financial_summary: FinancialSummary;
+  proposed_finance_amount?: number | null;
+  transaction_count?: number | null;
+  transaction_sample?: TransactionSnippet[] | null;
+  scheme_recommendations?: SchemeRecommendation[] | null;
+  appraisal_notes?: string | null;
+}
+

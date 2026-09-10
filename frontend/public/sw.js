@@ -69,6 +69,17 @@ self.addEventListener('fetch', (event) => {
 
   if (isApiRoute) return;
 
+  // 3b. Ignore Vite development paths on localhost so they go directly to the network without caching
+  const isDevVitePath =
+    url.pathname.startsWith('/@vite/') ||
+    url.pathname.startsWith('/@vite') ||
+    url.pathname.startsWith('/@react-refresh') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.startsWith('/node_modules/.vite/');
+
+  if (isDevVitePath) return;
+
   // 4. Navigation requests (HTML shell): Network-First with cached /index.html fallback
   if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
     event.respondWith(

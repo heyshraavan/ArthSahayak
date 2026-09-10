@@ -322,3 +322,120 @@ def test_legacy_api_payload_without_category_still_works():
     assert data["promoter_margin"] == 1500.0
     assert data["maximum_permissible_bank_finance"] == 6000.0
 
+
+def test_dossier_generate_valid_request_returns_pdf():
+    """Verify POST /dossier/generate returns application/pdf with correct Content-Disposition."""
+    payload = {
+        "applicant_name": "Ramesh Sharma",
+        "business_name": "Ramesh Woodcrafts",
+        "business_type": "Carpentry & Furniture Workshop",
+        "assessment_date": "2026-09-10",
+        "financial_period": "FY 2025-2026 (Apr-Sep)",
+        "financial_summary": {
+            "total_credit": 60000.0,
+            "total_debit": 20000.0,
+            "net_cash_flow": 40000.0,
+            "turnover": 60000.0,
+            "working_capital_requirement": 15000.0,
+            "promoter_margin": 3000.0,
+            "maximum_permissible_bank_finance": 12000.0,
+            "dscr": 1.75,
+        },
+        "proposed_finance_amount": 12000.0,
+        "transaction_count": 3,
+        "transaction_sample": [
+            {
+                "date": "2026-09-01",
+                "party_name": "Customer A",
+                "item": "Dining Table",
+                "amount": 25000.0,
+                "tx_type": "credit",
+            },
+        ],
+        "scheme_recommendations": [
+            {
+                "scheme_name": "PM Vishwakarma",
+                "sponsoring_agency": "Ministry of MSME",
+                "target_benefit": "5% interest concession",
+                "notes": "Traditional artisan carpentry",
+            }
+        ],
+        "appraisal_notes": "Consistent cash flow with positive surplus.",
+    }
+    response = client.post("/dossier/generate", json=payload)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "ArthSahayak_Credit_Appraisal_Dossier.pdf" in response.headers.get("content-disposition", "")
+    assert response.content.startswith(b"%PDF")
+
+
+def test_dossier_generate_pdf_has_exactly_two_pages():
+    """Verify the generated PDF from /dossier/generate has exactly 2 pages."""
+    import io
+    import pypdf
+
+    payload = {
+        "applicant_name": "Ramesh Sharma",
+        "business_name": "Ramesh Woodcrafts",
+        "financial_summary": {
+            "total_credit": 60000.0,
+            "total_debit": 20000.0,
+            "net_cash_flow": 40000.0,
+            "turnover": 60000.0,
+            "working_capital_requirement": 15000.0,
+            "promoter_margin": 3000.0,
+            "maximum_permissible_bank_finance": 12000.0,
+            "dscr": 1.75,
+        },
+    }
+    response = client.post("/dossier/generate", json=payload)
+    assert response.status_code == 200
+    reader = pypdf.PdfReader(io.BytesIO(response.content))
+    assert len(reader.pages) == 2
+
+
+def test_dossier_generate_invalid_payload_returns_422():
+    """Verify invalid payloads (missing financial_summary) return 422 error."""
+    # Missing required financial_summary
+    invalid_payload = {
+        "applicant_name": "Ramesh Sharma",
+        "business_name": "Ramesh Woodcrafts",
+    }
+    response = client.post("/dossier/generate", json=invalid_payload)
+    assert response.status_code == 422
+
+
+def test_dossier_generate_does_not_perform_financial_calculations(monkeypatch):
+    """Verify endpoint forwards pre-calculated financial_summary directly to PDF generator without recalculation."""
+    from unittest.mock import MagicMock
+    from app import main
+
+    mock_generator = MagicMock(return_value=b"%PDF-mock-bytes")
+    monkeypatch.setattr(main, "generate_dossier_pdf", mock_generator)
+
+    custom_summary = {
+        "total_credit": 123456.0,
+        "total_debit": 65432.0,
+        "net_cash_flow": 58024.0,
+        "turnover": 123456.0,
+        "working_capital_requirement": 30864.0,
+        "promoter_margin": 6172.8,
+        "maximum_permissible_bank_finance": 24691.2,
+        "dscr": 3.14,
+    }
+    payload = {
+        "applicant_name": "Direct Test",
+        "financial_summary": custom_summary,
+    }
+    response = client.post("/dossier/generate", json=payload)
+    assert response.status_code == 200
+    assert response.content == b"%PDF-mock-bytes"
+
+    # Verify generate_dossier_pdf was called with the exact un-recalculated financial values
+    assert mock_generator.called
+    passed_data = mock_generator.call_args[0][0]
+    assert passed_data.financial_summary.turnover == 123456.0
+    assert passed_data.financial_summary.dscr == 3.14
+    assert passed_data.financial_summary.maximum_permissible_bank_finance == 24691.2
+
+

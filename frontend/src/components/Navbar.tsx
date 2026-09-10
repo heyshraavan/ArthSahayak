@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, FileText, Globe, Home, Sparkles, Wifi } from 'lucide-react';
+import { BookOpen, FileText, Globe, Home, Sparkles, Wifi, WifiOff } from 'lucide-react';
 import type { NavigationTab } from '../types';
 
 interface NavbarProps {
@@ -7,6 +7,7 @@ interface NavbarProps {
   onLanguageToggle: () => void;
   activeTab?: NavigationTab;
   onTabChange?: (tab: NavigationTab) => void;
+  isOnline?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -14,6 +15,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLanguageToggle,
   activeTab,
   onTabChange,
+  isOnline = true,
 }) => {
   const tabs = [
     {
@@ -100,13 +102,27 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>{currentLanguage === 'hi' ? 'ENG' : 'हिंदी'}</span>
           </button>
 
-          <div
-            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md bg-emerald-50 text-emerald-800 text-xs font-medium"
-            title="System online"
-          >
-            <Wifi className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
-            <span className="sr-only">Status: Online</span>
-          </div>
+          {isOnline ? (
+            <div
+              className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md bg-emerald-50 text-emerald-800 text-xs font-medium"
+              title={currentLanguage === 'hi' ? 'सिस्टम ऑनलाइन' : 'System online'}
+            >
+              <Wifi className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+              <span className="sr-only">
+                {currentLanguage === 'hi' ? 'स्थिति: ऑनलाइन' : 'Status: Online'}
+              </span>
+            </div>
+          ) : (
+            <div
+              className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md bg-amber-50 text-amber-800 text-xs font-medium border border-amber-200"
+              title={currentLanguage === 'hi' ? 'सिस्टम ऑफ़लाइन' : 'System offline'}
+            >
+              <WifiOff className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+              <span className="text-[11px] font-bold">
+                {currentLanguage === 'hi' ? 'ऑफ़लाइन' : 'Offline'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </header>

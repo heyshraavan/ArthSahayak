@@ -1,8 +1,9 @@
 import base64
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
+from app.dossier_generator import DossierInput, generate_dossier_pdf
 from app.finance_engine import compute_financial_summary
 from app.schemas import (
     AudioTranscriptionRequest,
@@ -219,5 +220,30 @@ def extract_ocr_transaction(request: OcrExtractionRequest) -> OcrExtractionRespo
         raw_text=raw_suggestion.get("raw_text"),
         requires_confirmation=True,
     )
+
+
+@app.post("/dossier/generate", response_class=Response)
+def generate_dossier(request: DossierInput) -> Response:
+    """Generate an audit-ready 2-page PDF Credit Appraisal Dossier from structured input.
+
+    Receives pre-calculated financial data and applicant details. Performs NO financial
+    calculations, NO LLM calls, and NO external API calls.
+    """
+    try:
+        pdf_bytes = generate_dossier_pdf(request)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate dossier PDF: {e}",
+        )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="ArthSahayak_Credit_Appraisal_Dossier.pdf"',
+        },
+    )
+
 
 

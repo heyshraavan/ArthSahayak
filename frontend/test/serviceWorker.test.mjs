@@ -348,3 +348,31 @@ test('Service Worker: Cross-origin requests are NEVER intercepted or cached', as
   const response = await env.triggerFetch(crossOriginRequest, async () => new MockResponse('ok'));
   assert.strictEqual(response, null, 'Cross-origin requests must bypass the service worker cache');
 });
+
+test('Service Worker: Vite development paths (/@vite/, /@react-refresh, /src/, /node_modules/, /node_modules/.vite/) are NEVER cached or intercepted', async () => {
+  const env = setupServiceWorkerEnvironment();
+
+  const devRoutes = [
+    'https://arthsahayak.local/@vite/client',
+    'https://arthsahayak.local/@react-refresh',
+    'https://arthsahayak.local/src/App.tsx',
+    'https://arthsahayak.local/src/hooks/useOnlineStatus.ts',
+    'https://arthsahayak.local/node_modules/react/index.js',
+    'https://arthsahayak.local/node_modules/.vite/deps/react.js?v=5fe8dcf8',
+  ];
+
+  for (const route of devRoutes) {
+    const request = {
+      method: 'GET',
+      url: route,
+    };
+
+    const response = await env.triggerFetch(request, async () => new MockResponse('export default {}'));
+    assert.strictEqual(
+      response,
+      null,
+      `Vite development route ${route} must bypass the service worker cache and go directly to network`
+    );
+  }
+});
+
