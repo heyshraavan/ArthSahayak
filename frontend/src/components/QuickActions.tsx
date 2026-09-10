@@ -7,6 +7,7 @@ import {
   Camera,
   CheckCircle2,
   ChevronLeft,
+  CloudOff,
   Mic,
   Plus,
   RotateCcw,
@@ -21,9 +22,10 @@ import {
 } from 'lucide-react';
 import { getCategoryInfo, TRANSACTION_CATEGORIES } from '../lib/categories';
 import { normalizeDateString } from '../lib/dateUtils';
+import { enqueueMedia } from '../lib/ledgerStorage';
 import { extractOcrTransactions } from '../services/api';
 import { BackendExtractionProvider } from '../services/extraction';
-import { BackendTranscriptionProvider } from '../services/transcription';
+import { BackendTranscriptionProvider, blobToBase64 } from '../services/transcription';
 import type {
   OcrUIState,
   Transaction,
@@ -173,6 +175,29 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
   const handleExecuteOcrScan = async () => {
     if (!ocrImageBase64) return;
+
+    // Phase B: If offline before starting OCR, queue immediately
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      try {
+        await enqueueMedia({
+          type: 'ocr',
+          dataBase64: ocrImageBase64,
+          mimeType: ocrImageMime,
+        });
+        setOcrState('queued_offline');
+        return;
+      } catch (queueErr) {
+        console.error('Failed to queue offline image:', queueErr);
+        setOcrState('error');
+        setOcrError(
+          language === 'hi'
+            ? 'ऑफ़लाइन पर्ची सहेजने में विफल।'
+            : 'Failed to save chit offline.'
+        );
+        return;
+      }
+    }
+
     setOcrState('processing');
     setOcrError(null);
 
@@ -209,6 +234,31 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       setOcrTransactions(items);
       setOcrState('extracted');
     } catch (err: unknown) {
+      // Phase B: Preserve image in queue if API request fails because of network failure
+      const isNetworkError =
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        (err instanceof Error && (
+          err.message.toLowerCase().includes('failed to fetch') ||
+          err.message.toLowerCase().includes('network') ||
+          err.message.toLowerCase().includes('connection') ||
+          err.message.toLowerCase().includes('load failed')
+        ));
+
+      if (isNetworkError) {
+        try {
+          await enqueueMedia({
+            type: 'ocr',
+            dataBase64: ocrImageBase64,
+            mimeType: ocrImageMime,
+            errorMessage: err instanceof Error ? err.message : 'Network failure',
+          });
+          setOcrState('queued_offline');
+          return;
+        } catch (queueErr) {
+          console.error('Failed to preserve image after network error:', queueErr);
+        }
+      }
+
       setOcrState('error');
       const msg = err instanceof Error ? err.message : 'OCR extraction failed';
       setOcrError(msg);
@@ -379,6 +429,30 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
   };
 
   const handleProcessAudio = async (audioBlob: Blob) => {
+    // Phase B: If offline before sending, queue audio blob immediately
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      try {
+        const base64Data = await blobToBase64(audioBlob);
+        const mimeType = audioBlob.type || 'audio/webm';
+        await enqueueMedia({
+          type: 'voice',
+          dataBase64: base64Data,
+          mimeType,
+        });
+        setVoiceState('queued_offline');
+        return;
+      } catch (queueErr) {
+        console.error('Failed to queue offline voice recording:', queueErr);
+        setVoiceState('error');
+        setVoiceError(
+          language === 'hi'
+            ? 'ऑफ़लाइन ऑडियो सहेजने में विफल।'
+            : 'Failed to save voice recording offline.'
+        );
+        return;
+      }
+    }
+
     setVoiceState('processing');
     setVoiceError(null);
 
@@ -392,6 +466,33 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       populateExtractedFields(extractionResult.suggested_transaction);
       setVoiceState('extracted');
     } catch (err: unknown) {
+      // Phase B: Preserve audio in queue if request fails due to network failure
+      const isNetworkError =
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        (err instanceof Error && (
+          err.message.toLowerCase().includes('failed to fetch') ||
+          err.message.toLowerCase().includes('network') ||
+          err.message.toLowerCase().includes('connection') ||
+          err.message.toLowerCase().includes('load failed')
+        ));
+
+      if (isNetworkError) {
+        try {
+          const base64Data = await blobToBase64(audioBlob);
+          const mimeType = audioBlob.type || 'audio/webm';
+          await enqueueMedia({
+            type: 'voice',
+            dataBase64: base64Data,
+            mimeType,
+            errorMessage: err instanceof Error ? err.message : 'Network failure',
+          });
+          setVoiceState('queued_offline');
+          return;
+        } catch (queueErr) {
+          console.error('Failed to preserve audio after network error:', queueErr);
+        }
+      }
+
       setVoiceState('error');
       const msg = err instanceof Error ? err.message : 'Extraction failed';
       setVoiceError(msg);
@@ -606,7 +707,10 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                   </button>
                 )}
                 <h3 className="text-base font-bold text-slate-900">
-                  {activeModal === 'voice' && step === 'input' && voiceState !== 'extracted' && (
+                  {activeModal === 'voice' && step === 'input' && voiceState === 'queued_offline' && (
+                    language === 'hi' ? 'ऑफ़लाइन सहेजा गया' : 'Saved Offline'
+                  )}
+                  {activeModal === 'voice' && step === 'input' && voiceState !== 'extracted' && voiceState !== 'queued_offline' && (
                     language === 'hi' ? 'आवाज से लेनदेन दर्ज करें' : 'Voice Transaction Input'
                   )}
                   {activeModal === 'voice' && step === 'input' && voiceState === 'extracted' && (
@@ -626,6 +730,9 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                   )}
                   {activeModal === 'scan' && ocrState === 'extracted' && (
                     language === 'hi' ? `पहचाने गए लेनदेन (${ocrTransactions.length})` : `Extracted Entries (${ocrTransactions.length})`
+                  )}
+                  {activeModal === 'scan' && ocrState === 'queued_offline' && (
+                    language === 'hi' ? 'ऑफ़लाइन सहेजा गया' : 'Saved Offline'
                   )}
                   {activeModal === 'scan' && ocrState === 'error' && (
                     language === 'hi' ? 'स्कैनिंग त्रुटि' : 'OCR Scan Error'
@@ -779,6 +886,51 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                         className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-blue-900 text-white font-bold text-xs hover:bg-blue-800 transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? 'हाथ से लिखें' : 'Use Manual Form'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* State 5: Queued Offline */}
+                {voiceState === 'queued_offline' && (
+                  <div className="space-y-4 py-3 text-center">
+                    <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto shadow-inner">
+                      <CloudOff className="w-8 h-8 text-amber-700" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <h4 className="text-sm font-bold text-slate-900">
+                        {language === 'hi' ? 'ऑफ़लाइन सहेजा गया' : 'Saved Offline'}
+                      </h4>
+                      <p className="text-xs text-amber-900 font-semibold bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                        {language === 'hi'
+                          ? 'ऑफ़लाइन सहेजा गया। आपके वापस ऑनलाइन होने पर यह प्रोसेस होगा।'
+                          : "Saved offline. Will process when you're back online."}
+                      </p>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        {language === 'hi'
+                          ? 'सुरक्षा नियम: ऑनलाइन होने पर AI सुझाव पहले समीक्षा के लिए दिखाए जाएंगे। बिना पुष्टि के कोई प्रविष्टि बही-खाता में नहीं जुड़ेगी।'
+                          : 'Safety invariant: AI suggestions will be surfaced for review when connectivity returns. Nothing is added to the ledger without your explicit confirmation.'}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={resetManualForm}
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-blue-900 text-white font-bold text-xs shadow-md hover:bg-blue-800 transition-colors cursor-pointer"
+                      >
+                        {language === 'hi' ? 'ठीक है (Done)' : 'Done'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetManualForm();
+                          setActiveModal('manual');
+                          setStep('input');
+                        }}
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        {language === 'hi' ? 'हाथ से लिखें' : 'Enter Manually'}
                       </button>
                     </div>
                   </div>
@@ -1266,6 +1418,51 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                         className="min-h-[46px] py-2.5 px-3 rounded-xl bg-blue-900 text-white font-bold text-xs shadow-md hover:bg-blue-800 transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? 'हाथ से लिखें →' : 'Enter Manually →'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* State 4.5: QUEUED OFFLINE */}
+                {ocrState === 'queued_offline' && (
+                  <div className="space-y-4 py-3 text-center">
+                    <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto shadow-inner">
+                      <CloudOff className="w-8 h-8 text-amber-700" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <h4 className="text-sm font-bold text-slate-900">
+                        {language === 'hi' ? 'पर्ची ऑफ़लाइन सहेजी गई' : 'Chit Saved Offline'}
+                      </h4>
+                      <p className="text-xs text-amber-900 font-semibold bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                        {language === 'hi'
+                          ? 'ऑफ़लाइन सहेजा गया। आपके वापस ऑनलाइन होने पर यह प्रोसेस होगा।'
+                          : "Saved offline. Will process when you're back online."}
+                      </p>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        {language === 'hi'
+                          ? 'सुरक्षा नियम: ऑनलाइन होने पर AI सुझाव पहले समीक्षा के लिए दिखाए जाएंगे। बिना पुष्टि के कोई प्रविष्टि बही-खाता में नहीं जुड़ेगी।'
+                          : 'Safety invariant: AI suggestions will be surfaced for review when connectivity returns. Nothing is added to the ledger without your explicit confirmation.'}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={resetManualForm}
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-blue-900 text-white font-bold text-xs shadow-md hover:bg-blue-800 transition-colors cursor-pointer"
+                      >
+                        {language === 'hi' ? 'ठीक है (Done)' : 'Done'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetManualForm();
+                          setActiveModal('manual');
+                          setStep('input');
+                        }}
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        {language === 'hi' ? 'हाथ से लिखें' : 'Enter Manually'}
                       </button>
                     </div>
                   </div>

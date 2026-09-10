@@ -10,15 +10,20 @@
  * - Offline-first: confirmed ledger transactions survive page reloads and browser restarts.
  */
 
-import type { Transaction } from '../types';
+import type { QueuedMediaItem, QueuedMediaStatus, QueuedMediaType, Transaction } from '../types';
 
 const DB_NAME = 'arthsahayak_ledger_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'transactions';
+const MEDIA_QUEUE_STORE = 'media_sync_queue';
 const SEED_FLAG_KEY = 'arthsahayak_ledger_seeded_v1';
 
 /**
  * Open or upgrade the native IndexedDB database.
+ * Upgrades:
+ * - Version 1: 'transactions' store with indexes on date, tx_type, category
+ * - Version 2: 'media_sync_queue' store with indexes on status, createdAt, type
+ * Preserves all existing ledger data across migrations.
  */
 export function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -31,11 +36,20 @@ export function openDatabase(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      // Version 1: Ensure transactions store exists and is preserved
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
         store.createIndex('date', 'date', { unique: false });
         store.createIndex('tx_type', 'tx_type', { unique: false });
         store.createIndex('category', 'category', { unique: false });
+      }
+
+      // Version 2: Ensure media_sync_queue store exists
+      if (!db.objectStoreNames.contains(MEDIA_QUEUE_STORE)) {
+        const queueStore = db.createObjectStore(MEDIA_QUEUE_STORE, { keyPath: 'id' });
+        queueStore.createIndex('status', 'status', { unique: false });
+        queueStore.createIndex('createdAt', 'createdAt', { unique: false });
+        queueStore.createIndex('type', 'type', { unique: false });
       }
     };
 
@@ -193,4 +207,176 @@ export async function initializeLedger(seedData: Transaction[]): Promise<Transac
   }
 
   return existing;
+}
+
+/**
+ * Generate collision-safe unique ID for queued media.
+ */
+export function generateMediaQueueId(type: QueuedMediaType): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `queue-${type}-${crypto.randomUUID()}`;
+  }
+  const timestamp = Date.now();
+  const randomSuffix = Math.random().toString(36).slice(2, 10);
+  return `queue-${type}-${timestamp}-${randomSuffix}`;
+}
+
+/**
+ * Enqueue a voice recording or OCR image into IndexedDB for offline resilience.
+ */
+export async function enqueueMedia(
+  item: Omit<QueuedMediaItem, 'id' | 'createdAt' | 'status' | 'retryCount'> & {
+    id?: string;
+    createdAt?: string;
+    status?: QueuedMediaStatus;
+    retryCount?: number;
+    errorMessage?: string;
+  }
+): Promise<QueuedMediaItem> {
+  const db = await openDatabase();
+  const queuedItem: QueuedMediaItem = {
+    id: item.id || generateMediaQueueId(item.type),
+    type: item.type,
+    createdAt: item.createdAt || new Date().toISOString(),
+    status: item.status || 'pending',
+    dataBase64: item.dataBase64,
+    mimeType: item.mimeType,
+    retryCount: item.retryCount ?? 0,
+    errorMessage: item.errorMessage,
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readwrite');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    store.put(queuedItem);
+
+    tx.oncomplete = () => {
+      resolve(queuedItem);
+    };
+
+    tx.onerror = () => {
+      reject(tx.error || new Error('Failed to enqueue media item in IndexedDB.'));
+    };
+
+    tx.onabort = () => {
+      reject(tx.error || new Error('Enqueue media operation was aborted.'));
+    };
+  });
+}
+
+/**
+ * Retrieve all pending media queue items from IndexedDB, ordered FIFO (oldest first).
+ */
+export async function getPendingQueue(): Promise<QueuedMediaItem[]> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readonly');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const allItems = (request.result || []) as QueuedMediaItem[];
+      const pendingItems = allItems.filter((item) => item.status === 'pending');
+      pendingItems.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      resolve(pendingItems);
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to retrieve pending media queue from IndexedDB.'));
+    };
+  });
+}
+
+/**
+ * Remove a media queue item by ID (e.g. after successful processing or user cancellation).
+ */
+export async function removeQueueItem(id: string): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readwrite');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    store.delete(id);
+
+    tx.oncomplete = () => {
+      resolve();
+    };
+
+    tx.onerror = () => {
+      reject(tx.error || new Error(`Failed to delete queue item ${id} from IndexedDB.`));
+    };
+
+    tx.onabort = () => {
+      reject(tx.error || new Error(`Delete queue item operation for ${id} was aborted.`));
+    };
+  });
+}
+
+/**
+ * Update status and error message of a media queue item.
+ */
+export async function updateQueueItemStatus(
+  id: string,
+  status: QueuedMediaStatus,
+  errorMessage?: string
+): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readwrite');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    const getRequest = store.get(id);
+
+    getRequest.onsuccess = () => {
+      const item = getRequest.result as QueuedMediaItem | undefined;
+      if (!item) {
+        reject(new Error(`Queue item with id ${id} not found.`));
+        return;
+      }
+
+      item.status = status;
+      if (errorMessage !== undefined) {
+        item.errorMessage = errorMessage;
+      }
+      if (status === 'failed') {
+        item.retryCount = (item.retryCount || 0) + 1;
+      }
+
+      store.put(item);
+    };
+
+    getRequest.onerror = () => {
+      reject(getRequest.error || new Error(`Failed to find queue item ${id}.`));
+    };
+
+    tx.oncomplete = () => {
+      resolve();
+    };
+
+    tx.onerror = () => {
+      reject(tx.error || new Error(`Failed to update status for queue item ${id}.`));
+    };
+
+    tx.onabort = () => {
+      reject(tx.error || new Error(`Update status operation for queue item ${id} was aborted.`));
+    };
+  });
+}
+
+/**
+ * Clear all media items from the IndexedDB media queue.
+ */
+export async function clearMediaQueue(): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readwrite');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    store.clear();
+
+    tx.oncomplete = () => {
+      resolve();
+    };
+
+    tx.onerror = () => {
+      reject(tx.error || new Error('Failed to clear media queue from IndexedDB.'));
+    };
+  });
 }
