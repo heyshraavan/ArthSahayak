@@ -8,6 +8,7 @@ import type {
   CalculationStatus,
   EntrepreneurProfile,
   FinancialSummary,
+  QueuedMediaItem,
   Transaction,
 } from '../types';
 
@@ -23,6 +24,10 @@ interface DashboardPageProps {
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void> | void;
   onAddTransactions?: (txs: Omit<Transaction, 'id'>[]) => Promise<void> | void;
   language: 'en' | 'hi';
+  activeReviewItem?: QueuedMediaItem | null;
+  onCompleteReview?: (itemId: string) => Promise<void> | void;
+  onDiscardReview?: (itemId: string) => Promise<void> | void;
+  onDismissReview?: () => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -37,6 +42,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onAddTransaction,
   onAddTransactions,
   language,
+  activeReviewItem,
+  onCompleteReview,
+  onDiscardReview,
+  onDismissReview,
 }) => {
   return (
     <div className="space-y-4">
@@ -77,6 +86,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         onAddTransaction={onAddTransaction}
         onAddTransactions={onAddTransactions}
         language={language}
+        activeReviewItem={activeReviewItem}
+        onCompleteReview={onCompleteReview}
+        onDiscardReview={onDiscardReview}
+        onDismissReview={onDismissReview}
       />
 
       {/* Financial Health Metrics (API-driven / Loading / Error / Verified Engine Indicator) */}

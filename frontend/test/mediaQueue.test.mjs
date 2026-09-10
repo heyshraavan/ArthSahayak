@@ -77,8 +77,7 @@ class MockIDBDatabase {
     return store;
   }
 
-  transaction(storeNames, mode) {
-    const names = Array.isArray(storeNames) ? storeNames : [storeNames];
+  transaction(_storeNames, mode) {
     const tx = {
       mode,
       oncomplete: null,
@@ -157,7 +156,7 @@ globalThis.localStorage = {
 // Dynamic import of ledgerStorage module under test
 const {
   openDatabase,
-  addTransaction,
+  addTransaction: _addTransaction,
   loadTransactions,
   enqueueMedia,
   getPendingQueue,
@@ -271,7 +270,7 @@ test('retrieve pending items: returns only pending items sorted FIFO by createdA
     createdAt: '2026-09-10T07:05:00.000Z',
   });
 
-  const item3 = await enqueueMedia({
+  const _item3 = await enqueueMedia({
     type: 'voice',
     dataBase64: 'audio-data-3',
     mimeType: 'audio/webm',

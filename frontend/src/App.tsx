@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
 import { BottomNav } from './components/BottomNav';
 import { Navbar } from './components/Navbar';
+import { useMediaSyncQueue } from './hooks/useMediaSyncQueue';
 import {
   addTransaction,
   addTransactions,
@@ -25,6 +27,19 @@ import type {
 export function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [language, setLanguage] = useState<'en' | 'hi'>('en');
+
+  // Persistent Media Queue Sync Manager
+  const {
+    readyItems,
+    queueCounts,
+    isSyncing,
+    activeReviewItem,
+    startReview,
+    dismissActiveReview,
+    completeReview,
+    discardReview,
+    retryFailed,
+  } = useMediaSyncQueue();
 
   // Ledger state - persisted via native IndexedDB as single source of truth
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -220,6 +235,76 @@ export function App() {
           </div>
         )}
 
+        {/* Offline Queue Processing / Sync Indicator */}
+        {isSyncing && (
+          <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-center gap-2">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
+            <span className="font-medium">
+              {language === 'hi'
+                ? 'ऑफ़लाइन प्रविष्टियों का AI विश्लेषण जारी है...'
+                : 'Processing queued offline media with AI...'}
+            </span>
+          </div>
+        )}
+
+        {/* Failed items notice with retry */}
+        {queueCounts.failedCount > 0 && !isSyncing && (
+          <div className="mb-3 px-3 py-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>
+                {language === 'hi'
+                  ? `${queueCounts.failedCount} ऑफ़लाइन प्रविष्टि प्रोसेस नहीं हो सकी।`
+                  : `${queueCounts.failedCount} offline ${queueCounts.failedCount === 1 ? 'item' : 'items'} failed to process.`}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={retryFailed}
+              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-[11px] cursor-pointer"
+            >
+              {language === 'hi' ? 'पुनः प्रयास' : 'Retry'}
+            </button>
+          </div>
+        )}
+
+        {/* Persistent Ready For Review Banner */}
+        {readyItems.length > 0 && !activeReviewItem && (
+          <div className="mb-3.5 p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl shadow-xs">
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-amber-950 truncate">
+                    {language === 'hi'
+                      ? `${readyItems.length} ऑफ़लाइन प्रविष्टि समीक्षा के लिए तैयार`
+                      : `${readyItems.length} Offline ${readyItems.length === 1 ? 'Entry' : 'Entries'} Ready for Review`}
+                  </h4>
+                  <p className="text-[11px] text-amber-900/80 leading-tight mt-0.5">
+                    {language === 'hi'
+                      ? 'AI द्वारा तैयार — बही-खाता में जोड़ने हेतु पुष्टि आवश्यक है'
+                      : 'AI extraction ready — Human verification mandatory'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeTab === 'appraisal' || activeTab === 'schemes') {
+                    setActiveTab('dashboard');
+                  }
+                  startReview(readyItems[0]);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
+              >
+                {language === 'hi' ? 'समीक्षा करें →' : 'Review →'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'dashboard' && (
           <DashboardPage
             profile={profile}
@@ -233,6 +318,10 @@ export function App() {
             onAddTransaction={handleAddTransaction}
             onAddTransactions={handleAddTransactions}
             language={language}
+            activeReviewItem={activeReviewItem}
+            onCompleteReview={completeReview}
+            onDiscardReview={discardReview}
+            onDismissReview={dismissActiveReview}
           />
         )}
 
@@ -242,6 +331,10 @@ export function App() {
             onAddTransaction={handleAddTransaction}
             onAddTransactions={handleAddTransactions}
             language={language}
+            activeReviewItem={activeReviewItem}
+            onCompleteReview={completeReview}
+            onDiscardReview={discardReview}
+            onDismissReview={dismissActiveReview}
           />
         )}
 

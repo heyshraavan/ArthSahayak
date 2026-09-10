@@ -82,7 +82,18 @@ export interface OcrExtractionResponse {
 }
 
 export type QueuedMediaType = 'voice' | 'ocr';
-export type QueuedMediaStatus = 'pending' | 'processing' | 'failed';
+export type QueuedMediaStatus = 'pending' | 'processing' | 'ready_for_review' | 'failed';
+
+export interface ExtractedMediaData {
+  voice?: {
+    transcript: string;
+    suggestedTransaction: BackendTransaction;
+  };
+  ocr?: {
+    suggestedTransactions: BackendTransaction[];
+    rawText?: string | null;
+  };
+}
 
 export interface QueuedMediaItem {
   id: string;
@@ -93,5 +104,14 @@ export interface QueuedMediaItem {
   mimeType: string;
   retryCount: number;
   errorMessage?: string;
+  extractedData?: ExtractedMediaData;
+}
+
+export interface QueueStatusSummary {
+  pendingCount: number;
+  processingCount: number;
+  readyCount: number;
+  failedCount: number;
+  total: number;
 }
 

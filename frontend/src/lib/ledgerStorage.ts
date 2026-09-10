@@ -10,7 +10,14 @@
  * - Offline-first: confirmed ledger transactions survive page reloads and browser restarts.
  */
 
-import type { QueuedMediaItem, QueuedMediaStatus, QueuedMediaType, Transaction } from '../types';
+import type {
+  ExtractedMediaData,
+  QueuedMediaItem,
+  QueuedMediaStatus,
+  QueuedMediaType,
+  QueueStatusSummary,
+  Transaction,
+} from '../types';
 
 const DB_NAME = 'arthsahayak_ledger_db';
 const DB_VERSION = 2;
@@ -231,6 +238,7 @@ export async function enqueueMedia(
     status?: QueuedMediaStatus;
     retryCount?: number;
     errorMessage?: string;
+    extractedData?: ExtractedMediaData;
   }
 ): Promise<QueuedMediaItem> {
   const db = await openDatabase();
@@ -243,6 +251,7 @@ export async function enqueueMedia(
     mimeType: item.mimeType,
     retryCount: item.retryCount ?? 0,
     errorMessage: item.errorMessage,
+    extractedData: item.extractedData,
   };
 
   return new Promise((resolve, reject) => {
@@ -377,6 +386,176 @@ export async function clearMediaQueue(): Promise<void> {
 
     tx.onerror = () => {
       reject(tx.error || new Error('Failed to clear media queue from IndexedDB.'));
+    };
+  });
+}
+
+/**
+ * Mark a queue item as 'ready_for_review' and persist the extracted AI data inside the item.
+ * Preserves the item across page refreshes until explicitly confirmed or discarded by the user.
+ */
+export async function setQueueItemReadyForReview(
+  id: string,
+  extractedData: ExtractedMediaData
+): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readwrite');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    const getRequest = store.get(id);
+
+    getRequest.onsuccess = () => {
+      const item = getRequest.result as QueuedMediaItem | undefined;
+      if (!item) {
+        reject(new Error(`Queue item with id ${id} not found.`));
+        return;
+      }
+
+      item.status = 'ready_for_review';
+      item.extractedData = extractedData;
+      item.errorMessage = undefined;
+
+      store.put(item);
+    };
+
+    getRequest.onerror = () => {
+      reject(getRequest.error || new Error(`Failed to find queue item ${id}.`));
+    };
+
+    tx.oncomplete = () => {
+      resolve();
+    };
+
+    tx.onerror = () => {
+      reject(tx.error || new Error(`Failed to mark queue item ${id} as ready for review.`));
+    };
+
+    tx.onabort = () => {
+      reject(tx.error || new Error(`Operation to mark ${id} ready for review was aborted.`));
+    };
+  });
+}
+
+/**
+ * Retrieve all items waiting for human review from IndexedDB, ordered FIFO (oldest first).
+ */
+export async function getReadyForReviewQueue(): Promise<QueuedMediaItem[]> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readonly');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const allItems = (request.result || []) as QueuedMediaItem[];
+      const readyItems = allItems.filter((item) => item.status === 'ready_for_review');
+      readyItems.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      resolve(readyItems);
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to retrieve ready-for-review items from IndexedDB.'));
+    };
+  });
+}
+
+/**
+ * Reset any stalled 'processing' queue items back to 'pending' on startup.
+ * Fixes orphaned state if a browser tab or network session terminated mid-flight.
+ */
+export async function resetStalledProcessingItems(): Promise<number> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readwrite');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const allItems = (request.result || []) as QueuedMediaItem[];
+      const stalled = allItems.filter((item) => item.status === 'processing');
+      for (const item of stalled) {
+        item.status = 'pending';
+        store.put(item);
+      }
+      resolve(stalled.length);
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to reset stalled processing items.'));
+    };
+
+    tx.onerror = () => {
+      reject(tx.error || new Error('Failed to commit reset of stalled processing items.'));
+    };
+  });
+}
+
+/**
+ * Get aggregate status counts for the media sync queue.
+ */
+export async function getQueueStatus(): Promise<QueueStatusSummary> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readonly');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const allItems = (request.result || []) as QueuedMediaItem[];
+      let pendingCount = 0;
+      let processingCount = 0;
+      let readyCount = 0;
+      let failedCount = 0;
+
+      for (const item of allItems) {
+        if (item.status === 'pending') pendingCount++;
+        else if (item.status === 'processing') processingCount++;
+        else if (item.status === 'ready_for_review') readyCount++;
+        else if (item.status === 'failed') failedCount++;
+      }
+
+      resolve({
+        pendingCount,
+        processingCount,
+        readyCount,
+        failedCount,
+        total: allItems.length,
+      });
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to retrieve media queue status.'));
+    };
+  });
+}
+
+/**
+ * Reset any failed queue items back to 'pending' to allow manual or automatic retry.
+ */
+export async function resetFailedQueueItems(): Promise<number> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_QUEUE_STORE, 'readwrite');
+    const store = tx.objectStore(MEDIA_QUEUE_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const allItems = (request.result || []) as QueuedMediaItem[];
+      const failed = allItems.filter((item) => item.status === 'failed');
+      for (const item of failed) {
+        item.status = 'pending';
+        item.errorMessage = undefined;
+        store.put(item);
+      }
+      resolve(failed.length);
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to reset failed queue items.'));
+    };
+
+    tx.onerror = () => {
+      reject(tx.error || new Error('Failed to commit reset of failed queue items.'));
     };
   });
 }

@@ -28,6 +28,7 @@ import { BackendExtractionProvider } from '../services/extraction';
 import { BackendTranscriptionProvider, blobToBase64 } from '../services/transcription';
 import type {
   OcrUIState,
+  QueuedMediaItem,
   Transaction,
   TransactionCategory,
   TransactionType,
@@ -38,6 +39,10 @@ interface QuickActionsProps {
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void> | void;
   onAddTransactions?: (txs: Omit<Transaction, 'id'>[]) => Promise<void> | void;
   language: 'en' | 'hi';
+  activeReviewItem?: QueuedMediaItem | null;
+  onCompleteReview?: (itemId: string) => Promise<void> | void;
+  onDiscardReview?: (itemId: string) => Promise<void> | void;
+  onDismissReview?: () => void;
 }
 
 export interface EditableOcrTransaction {
@@ -58,6 +63,10 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
   onAddTransaction,
   onAddTransactions,
   language,
+  activeReviewItem,
+  onCompleteReview,
+  onDiscardReview,
+  onDismissReview,
 }) => {
   const [activeModal, setActiveModal] = useState<'voice' | 'scan' | 'manual' | null>(null);
 
@@ -135,7 +144,65 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     setOcrRawText(null);
     setOcrTransactions([]);
     setActiveModal(null);
+    if (onDismissReview) {
+      onDismissReview();
+    }
   };
+
+  const handleDiscardReviewItem = async () => {
+    if (activeReviewItem && onDiscardReview) {
+      await onDiscardReview(activeReviewItem.id);
+    }
+    resetManualForm();
+  };
+
+  // Load review item from persistent media queue when user triggers review
+  useEffect(() => {
+    if (!activeReviewItem) return;
+
+    if (activeReviewItem.type === 'voice' && activeReviewItem.extractedData?.voice) {
+      const voice = activeReviewItem.extractedData.voice;
+      stopAudioRecording(false);
+      setIsSaving(false);
+      setFormError(null);
+      setVoiceError(null);
+      setTranscriptText(voice.transcript);
+      populateExtractedFields(voice.suggestedTransaction);
+      setVoiceState('extracted');
+      setStep('input');
+      setActiveModal('voice');
+    } else if (activeReviewItem.type === 'ocr' && activeReviewItem.extractedData?.ocr) {
+      const ocr = activeReviewItem.extractedData.ocr;
+      stopAudioRecording(false);
+      setIsSaving(false);
+      setFormError(null);
+      setOcrError(null);
+      setOcrRawText(ocr.rawText || null);
+      if (activeReviewItem.dataBase64) {
+        setOcrImagePreview(`data:${activeReviewItem.mimeType};base64,${activeReviewItem.dataBase64}`);
+        setOcrImageBase64(activeReviewItem.dataBase64);
+        setOcrImageMime(activeReviewItem.mimeType);
+      }
+      const items: EditableOcrTransaction[] = (ocr.suggestedTransactions || []).map((tx, idx) => {
+        const normalizedDate = normalizeDateString(tx.date);
+        return {
+          id: `ocr-tx-${Date.now()}-${idx}`,
+          date: normalizedDate || '',
+          party_name: tx.party_name || '',
+          item: tx.item || '',
+          amount: tx.amount ? String(tx.amount) : '',
+          tx_type: tx.tx_type || 'debit',
+          category: (tx.category as TransactionCategory) || (tx.tx_type === 'credit' ? 'sales' : 'raw_material'),
+          error: !normalizedDate
+            ? (language === 'hi' ? 'तारीख की पुष्टि करें (YYYY-MM-DD)' : 'Please verify date (YYYY-MM-DD)')
+            : null,
+        };
+      });
+      setOcrTransactions(items);
+      setOcrState('extracted');
+      setActiveModal('scan');
+    }
+  }, [activeReviewItem, language]);
 
   const handleStartVoiceModal = () => {
     resetManualForm();
@@ -345,6 +412,11 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         }
       }
 
+      // If this was an offline queued review item, remove from queue only after successful ledger persistence
+      if (activeReviewItem && onCompleteReview) {
+        await onCompleteReview(activeReviewItem.id);
+      }
+
       resetManualForm();
     } catch (err: unknown) {
       console.error('Failed to save OCR batch:', err);
@@ -408,7 +480,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     }
   };
 
-  const stopAudioRecording = (process = true) => {
+  function stopAudioRecording(process = true) {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -515,14 +587,14 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     }
   };
 
-  const populateExtractedFields = (tx: {
+  function populateExtractedFields(tx: {
     date: string;
     party_name: string;
     item: string;
     amount: number;
     tx_type: TransactionType;
     category?: string | null;
-  }) => {
+  }) {
     const normalizedDate = normalizeDateString(tx.date);
     setDate(normalizedDate || new Date().toISOString().split('T')[0]);
     setPartyName(tx.party_name || '');
@@ -531,7 +603,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     setTxType(tx.tx_type || 'credit');
     setCategory((tx.category as TransactionCategory) || (tx.tx_type === 'debit' ? 'raw_material' : 'sales'));
     setStep('input');
-  };
+  }
 
   const handleProceedToReview = (e: React.FormEvent) => {
     e.preventDefault();
@@ -579,6 +651,11 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         tx_type: txType,
         category: category,
       });
+
+      // If this was an offline queued review item, remove from queue only after successful ledger persistence
+      if (activeReviewItem && onCompleteReview) {
+        await onCompleteReview(activeReviewItem.id);
+      }
 
       resetManualForm();
     } catch (err: unknown) {
@@ -745,14 +822,27 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                   )}
                 </h3>
               </div>
-              <button
-                type="button"
-                onClick={resetManualForm}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
-                aria-label="Close dialog"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1">
+                {activeReviewItem && (
+                  <button
+                    type="button"
+                    onClick={handleDiscardReviewItem}
+                    className="px-2 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    title={language === 'hi' ? 'यह ऑफ़लाइन सुझाव हटाएं' : 'Discard offline suggestion'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{language === 'hi' ? 'हटाएं' : 'Discard'}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={resetManualForm}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+                  aria-label="Close dialog"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body: Voice Recording & Processing State Machine */}
