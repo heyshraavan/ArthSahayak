@@ -6,6 +6,7 @@ import { useMediaSyncQueue } from './hooks/useMediaSyncQueue';
 import {
   addTransaction,
   addTransactions,
+  deleteTransaction,
   generateTransactionId,
   initializeLedger,
 } from './lib/ledgerStorage';
@@ -227,6 +228,27 @@ export function App() {
     });
   };
 
+  // Handle manual deletion of a single confirmed ledger transaction
+  const handleDeleteTransaction = async (id: string) => {
+    try {
+      // 1. Delete from IndexedDB first
+      await deleteTransaction(id);
+      setPersistenceError(null);
+    } catch (err: unknown) {
+      console.error('Failed to delete transaction:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to delete transaction locally';
+      setPersistenceError(msg);
+      throw err;
+    }
+
+    // 2. Update React state ONLY after IndexedDB deletion succeeds & trigger recalculation
+    setTransactions((prev) => {
+      const updated = prev.filter((tx) => tx.id !== id);
+      fetchBackendCalculation(updated);
+      return updated;
+    });
+  };
+
   // Explicit user action to view offline demo numbers when backend is unreachable
   const handleUseDemoFallback = () => {
     setFinancialSummary(DEMO_FINANCIAL_SUMMARY);
@@ -359,6 +381,7 @@ export function App() {
             transactions={transactions}
             onAddTransaction={handleAddTransaction}
             onAddTransactions={handleAddTransactions}
+            onDeleteTransaction={handleDeleteTransaction}
             language={language}
             activeReviewItem={activeReviewItem}
             onCompleteReview={completeReview}
@@ -372,6 +395,7 @@ export function App() {
             transactions={transactions}
             onAddTransaction={handleAddTransaction}
             onAddTransactions={handleAddTransactions}
+            onDeleteTransaction={handleDeleteTransaction}
             language={language}
             activeReviewItem={activeReviewItem}
             onCompleteReview={completeReview}
@@ -384,7 +408,12 @@ export function App() {
           <AppraisalPage financialSummary={financialSummary} language={language} />
         )}
 
-        {activeTab === 'schemes' && <SchemesPage language={language} />}
+        {activeTab === 'schemes' && (
+          <SchemesPage
+            language={language}
+            initialProfile={{ trade: profile.trade, locationType: 'rural' }}
+          />
+        )}
       </main>
 
       {/* Mobile-First Bottom Navigation */}

@@ -122,3 +122,5 @@ export interface QueueStatusSummary {
   total: number;
 }
 
+export * from './scheme';
+

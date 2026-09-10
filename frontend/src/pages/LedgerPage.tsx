@@ -7,6 +7,7 @@ interface LedgerPageProps {
   transactions: Transaction[];
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void> | void;
   onAddTransactions?: (txs: Omit<Transaction, 'id'>[]) => Promise<void> | void;
+  onDeleteTransaction?: (id: string) => Promise<void> | void;
   language: 'en' | 'hi';
   activeReviewItem?: QueuedMediaItem | null;
   onCompleteReview?: (itemId: string) => Promise<void> | void;
@@ -18,6 +19,7 @@ export const LedgerPage: React.FC<LedgerPageProps> = ({
   transactions,
   onAddTransaction,
   onAddTransactions,
+  onDeleteTransaction,
   language,
   activeReviewItem,
   onCompleteReview,
@@ -47,7 +49,11 @@ export const LedgerPage: React.FC<LedgerPageProps> = ({
         onDismissReview={onDismissReview}
       />
 
-      <RecentTransactions transactions={transactions} language={language} />
+      <RecentTransactions
+        transactions={transactions}
+        language={language}
+        onDeleteTransaction={onDeleteTransaction}
+      />
     </div>
   );
 };

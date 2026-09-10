@@ -23,6 +23,7 @@ interface DashboardPageProps {
   transactions: Transaction[];
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void> | void;
   onAddTransactions?: (txs: Omit<Transaction, 'id'>[]) => Promise<void> | void;
+  onDeleteTransaction?: (id: string) => Promise<void> | void;
   language: 'en' | 'hi';
   activeReviewItem?: QueuedMediaItem | null;
   onCompleteReview?: (itemId: string) => Promise<void> | void;
@@ -41,6 +42,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   transactions,
   onAddTransaction,
   onAddTransactions,
+  onDeleteTransaction,
   language,
   activeReviewItem,
   onCompleteReview,
@@ -104,7 +106,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       />
 
       {/* Recent Transactions List */}
-      <RecentTransactions transactions={transactions} language={language} />
+      <RecentTransactions
+        transactions={transactions}
+        language={language}
+        onDeleteTransaction={onDeleteTransaction}
+      />
     </div>
   );
 };

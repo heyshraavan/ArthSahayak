@@ -170,6 +170,31 @@ export async function addTransactions(transactions: Transaction[]): Promise<void
 }
 
 /**
+ * Delete a single confirmed transaction from IndexedDB by ID.
+ * Only human-confirmed deletion may be passed here.
+ */
+export async function deleteTransaction(id: string): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    store.delete(id);
+
+    tx.oncomplete = () => {
+      resolve();
+    };
+
+    tx.onerror = () => {
+      reject(tx.error || new Error(`Failed to delete transaction ${id} from IndexedDB.`));
+    };
+
+    tx.onabort = () => {
+      reject(tx.error || new Error(`Delete operation for transaction ${id} was aborted.`));
+    };
+  });
+}
+
+/**
  * Clear all transactions from the IndexedDB store.
  */
 export async function clearTransactions(): Promise<void> {

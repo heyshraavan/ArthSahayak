@@ -1,15 +1,36 @@
 import React, { useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Calendar, Tag } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Calendar, Check, Tag, Trash2, X } from 'lucide-react';
 import { getCategoryInfo } from '../lib/categories';
 import type { Transaction } from '../types';
 
 interface RecentTransactionsProps {
   transactions: Transaction[];
   language: 'en' | 'hi';
+  onDeleteTransaction?: (id: string) => Promise<void> | void;
 }
 
-export const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions, language }) => {
+export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
+  transactions,
+  language,
+  onDeleteTransaction,
+}) => {
   const [filter, setFilter] = useState<'all' | 'credit' | 'debit'>('all');
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    if (!onDeleteTransaction) return;
+    setIsDeletingId(id);
+    try {
+      await onDeleteTransaction(id);
+      setConfirmingId(null);
+    } catch (err) {
+      console.error('Failed to delete transaction:', err);
+      setConfirmingId(null);
+    } finally {
+      setIsDeletingId(null);
+    }
+  };
 
   const filtered = transactions.filter((tx) => {
     if (filter === 'all') return true;
@@ -122,7 +143,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transact
                   </div>
                 </div>
 
-                <div className="text-right shrink-0">
+                <div className="text-right shrink-0 flex flex-col items-end justify-between self-stretch">
                   <p
                     className={`text-base font-black ${
                       isCredit ? 'text-emerald-700' : 'text-slate-900'
@@ -130,6 +151,52 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transact
                   >
                     {isCredit ? '+' : '-'}₹{tx.amount.toLocaleString('en-IN')}
                   </p>
+
+                  {onDeleteTransaction && (
+                    <div className="mt-1">
+                      {confirmingId === tx.id ? (
+                        <div className="flex items-center gap-1 bg-rose-50 border border-rose-200 rounded-lg p-0.5 shadow-xs">
+                          <span className="text-[10px] font-bold text-rose-700 px-1">
+                            {language === 'hi' ? 'हटाएं?' : 'Delete?'}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={isDeletingId === tx.id}
+                            onClick={() => handleDelete(tx.id)}
+                            className="p-1 rounded bg-rose-600 hover:bg-rose-700 text-white transition-colors cursor-pointer disabled:opacity-50"
+                            aria-label={language === 'hi' ? 'हटाने की पुष्टि करें' : 'Confirm delete'}
+                            title={language === 'hi' ? 'पुष्टि करें' : 'Confirm'}
+                          >
+                            {isDeletingId === tx.id ? (
+                              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Check className="w-3 h-3" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isDeletingId === tx.id}
+                            onClick={() => setConfirmingId(null)}
+                            className="p-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer"
+                            aria-label={language === 'hi' ? 'रद्द करें' : 'Cancel'}
+                            title={language === 'hi' ? 'रद्द करें' : 'Cancel'}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingId(tx.id)}
+                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          aria-label={`${language === 'hi' ? 'प्रविष्टि हटाएं' : 'Delete entry'}: ${tx.party_name} ₹${tx.amount}`}
+                          title={language === 'hi' ? 'प्रविष्टि हटाएं' : 'Delete entry'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </article>
             );
