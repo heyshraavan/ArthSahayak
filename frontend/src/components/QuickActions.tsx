@@ -301,28 +301,19 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       setOcrTransactions(items);
       setOcrState('extracted');
     } catch (err: unknown) {
-      // Phase B: Preserve image in queue if API request fails because of network failure
-      const isNetworkError =
-        (typeof navigator !== 'undefined' && !navigator.onLine) ||
-        (err instanceof Error && (
-          err.message.toLowerCase().includes('failed to fetch') ||
-          err.message.toLowerCase().includes('network') ||
-          err.message.toLowerCase().includes('connection') ||
-          err.message.toLowerCase().includes('load failed')
-        ));
-
-      if (isNetworkError) {
+      // Only queue as offline if connectivity dropped mid-request and device is genuinely offline
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
         try {
           await enqueueMedia({
             type: 'ocr',
             dataBase64: ocrImageBase64,
             mimeType: ocrImageMime,
-            errorMessage: err instanceof Error ? err.message : 'Network failure',
+            errorMessage: err instanceof Error ? err.message : 'Offline during request',
           });
           setOcrState('queued_offline');
           return;
         } catch (queueErr) {
-          console.error('Failed to preserve image after network error:', queueErr);
+          console.error('Failed to preserve image after connectivity loss:', queueErr);
         }
       }
 
@@ -538,17 +529,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       populateExtractedFields(extractionResult.suggested_transaction);
       setVoiceState('extracted');
     } catch (err: unknown) {
-      // Phase B: Preserve audio in queue if request fails due to network failure
-      const isNetworkError =
-        (typeof navigator !== 'undefined' && !navigator.onLine) ||
-        (err instanceof Error && (
-          err.message.toLowerCase().includes('failed to fetch') ||
-          err.message.toLowerCase().includes('network') ||
-          err.message.toLowerCase().includes('connection') ||
-          err.message.toLowerCase().includes('load failed')
-        ));
-
-      if (isNetworkError) {
+      // Only queue as offline if connectivity dropped mid-request and device is genuinely offline
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
         try {
           const base64Data = await blobToBase64(audioBlob);
           const mimeType = audioBlob.type || 'audio/webm';
@@ -556,12 +538,12 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             type: 'voice',
             dataBase64: base64Data,
             mimeType,
-            errorMessage: err instanceof Error ? err.message : 'Network failure',
+            errorMessage: err instanceof Error ? err.message : 'Offline during request',
           });
           setVoiceState('queued_offline');
           return;
         } catch (queueErr) {
-          console.error('Failed to preserve audio after network error:', queueErr);
+          console.error('Failed to preserve audio after connectivity loss:', queueErr);
         }
       }
 

@@ -393,42 +393,144 @@ test('offline OCR capture is queued: when navigator.onLine is false, chit photo 
   Object.defineProperty(globalThis.navigator, 'onLine', { value: originalOnLine, configurable: true, writable: true });
 });
 
-test('failed network request preserves the captured media in IndexedDB', async () => {
+test('Regression 1: navigator.onLine === false -> queue + Saved Offline', async () => {
   await clearMediaQueue();
 
-  // Simulate online when action started, but fetch threw network failure
+  const originalOnLine = globalThis.navigator?.onLine;
+  Object.defineProperty(globalThis.navigator, 'onLine', { value: false, configurable: true, writable: true });
+
+  const imageBase64 = 'fake-offline-chit-base64';
+  const mimeType = 'image/jpeg';
+
+  let ocrState = 'idle';
+  let ocrError = null;
+
+  // Simulate QuickActions handleExecuteOcrScan logic
+  if (!globalThis.navigator.onLine) {
+    await enqueueMedia({
+      type: 'ocr',
+      dataBase64: imageBase64,
+      mimeType,
+    });
+    ocrState = 'queued_offline';
+  }
+
+  assert.strictEqual(ocrState, 'queued_offline', 'Must transition to queued_offline when offline');
+  assert.strictEqual(ocrError, null);
+
+  const pending = await getPendingQueue();
+  assert.strictEqual(pending.length, 1, 'Item must be enqueued in IndexedDB');
+  assert.strictEqual(pending[0].type, 'ocr');
+
+  Object.defineProperty(globalThis.navigator, 'onLine', { value: originalOnLine, configurable: true, writable: true });
+});
+
+test('Regression 2: navigator.onLine === true + API succeeds -> normal processing', async () => {
+  await clearMediaQueue();
+
   const originalOnLine = globalThis.navigator?.onLine;
   Object.defineProperty(globalThis.navigator, 'onLine', { value: true, configurable: true, writable: true });
 
-  const imageBase64 = 'fake-chit-attempted-online';
+  let ocrState = 'processing';
+  let extractedTransactions = [];
+
+  // Simulated API call success
+  try {
+    const mockApiResponse = {
+      suggested_transactions: [
+        { date: '2026-09-10', party_name: 'Gupta Timber', item: 'Timber Planks', amount: 5000, tx_type: 'debit' },
+      ],
+    };
+    extractedTransactions = mockApiResponse.suggested_transactions;
+    ocrState = 'extracted';
+  } catch {
+    ocrState = 'error';
+  }
+
+  assert.strictEqual(ocrState, 'extracted', 'State must be extracted upon success');
+  assert.strictEqual(extractedTransactions.length, 1);
+
+  const pending = await getPendingQueue();
+  assert.strictEqual(pending.length, 0, 'No media must be queued when online API succeeds');
+
+  Object.defineProperty(globalThis.navigator, 'onLine', { value: originalOnLine, configurable: true, writable: true });
+});
+
+test('Regression 3: navigator.onLine === true + API returns 4xx/5xx -> show API error, do not queue as offline', async () => {
+  await clearMediaQueue();
+
+  const originalOnLine = globalThis.navigator?.onLine;
+  Object.defineProperty(globalThis.navigator, 'onLine', { value: true, configurable: true, writable: true });
+
+  const imageBase64 = 'fake-chit-4xx-test';
   const mimeType = 'image/jpeg';
 
   let ocrState = 'processing';
-  try {
-    // Simulated fetch failure
-    throw new TypeError('Failed to fetch');
-  } catch (err) {
-    const isNetworkError =
-      !globalThis.navigator.onLine ||
-      (err instanceof Error && err.message.toLowerCase().includes('failed to fetch'));
+  let ocrError = null;
 
-    if (isNetworkError) {
+  try {
+    // Simulated 422 Unprocessable Entity from backend
+    const err = new Error('The image could not be reliably read. Please review or enter manually.');
+    err.status = 422;
+    throw err;
+  } catch (err) {
+    if (!globalThis.navigator.onLine) {
       await enqueueMedia({
         type: 'ocr',
         dataBase64: imageBase64,
         mimeType,
-        errorMessage: err.message,
       });
       ocrState = 'queued_offline';
+    } else {
+      ocrState = 'error';
+      ocrError = err.message;
     }
   }
 
-  assert.strictEqual(ocrState, 'queued_offline');
+  assert.strictEqual(ocrState, 'error', 'Must set state to error on 4xx/5xx');
+  assert.strictEqual(ocrError, 'The image could not be reliably read. Please review or enter manually.');
 
   const pending = await getPendingQueue();
-  assert.strictEqual(pending.length, 1);
-  assert.strictEqual(pending[0].type, 'ocr');
-  assert.strictEqual(pending[0].errorMessage, 'Failed to fetch');
+  assert.strictEqual(pending.length, 0, 'Must NOT enqueue media to offline queue on 4xx/5xx API error');
+
+  Object.defineProperty(globalThis.navigator, 'onLine', { value: originalOnLine, configurable: true, writable: true });
+});
+
+test('Regression 4: navigator.onLine === true + request/network failure -> handle appropriately and do not falsely claim the browser is offline', async () => {
+  await clearMediaQueue();
+
+  const originalOnLine = globalThis.navigator?.onLine;
+  Object.defineProperty(globalThis.navigator, 'onLine', { value: true, configurable: true, writable: true });
+
+  const audioBase64 = 'fake-voice-network-error';
+  const mimeType = 'audio/webm';
+
+  let voiceState = 'processing';
+  let voiceError = null;
+
+  try {
+    // Simulated network error / connection refused while browser is online
+    throw new Error('Network Error: Failed to reach ArthSahayak API (Failed to fetch). Ensure FastAPI is running at http://127.0.0.1:8000.');
+  } catch (err) {
+    if (!globalThis.navigator.onLine) {
+      await enqueueMedia({
+        type: 'voice',
+        dataBase64: audioBase64,
+        mimeType,
+      });
+      voiceState = 'queued_offline';
+    } else {
+      voiceState = 'error';
+      voiceError = err.message;
+    }
+  }
+
+  assert.strictEqual(voiceState, 'error', 'Must set state to error on network failure while online');
+  assert.notStrictEqual(voiceState, 'queued_offline', 'Must NOT claim device is offline or show Saved Offline');
+  assert.ok(voiceError.includes('Network Error: Failed to reach ArthSahayak API'));
+
+  const pending = await getPendingQueue();
+  assert.strictEqual(pending.length, 0, 'Must NOT enqueue media to offline queue on network error while online');
 
   Object.defineProperty(globalThis.navigator, 'onLine', { value: originalOnLine, configurable: true, writable: true });
 });
