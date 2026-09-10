@@ -48,6 +48,13 @@ export interface FinancialSummary {
   dscr: number | null;
 }
 
+export interface WorkingCapitalAssessment {
+  turnover: number;
+  working_capital_requirement: number;
+  promoter_margin: number;
+  maximum_permissible_bank_finance: number;
+}
+
 export interface EntrepreneurProfile {
   name: string;
   trade: string;
@@ -58,7 +65,7 @@ export interface EntrepreneurProfile {
 export type NavigationTab = 'dashboard' | 'ledger' | 'appraisal' | 'schemes';
 
 export type CalculationStatus = 'loading' | 'success' | 'error' | 'demo';
-export type CalculationDataSource = 'backend' | 'demo' | null;
+export type CalculationDataSource = 'backend' | 'local' | 'demo' | null;
 
 export type VoiceUIState = 'idle' | 'recording' | 'processing' | 'extracted' | 'error' | 'queued_offline';
 

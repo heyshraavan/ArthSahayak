@@ -74,13 +74,12 @@ class FinanceCalculationRequest(BaseModel):
     )
     net_operating_income: float = Field(
         ...,
-        ge=0.0,
-        description="Net operating income. Must be non-negative.",
+        description="Net operating income or operating surplus (can be negative for unprofitable periods).",
     )
     debt_service: float = Field(
         ...,
         ge=0.0,
-        description="Total annual debt service obligations. Must be non-negative.",
+        description="Recorded debt service repayment proxy. Must be non-negative.",
     )
 
 

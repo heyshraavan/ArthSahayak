@@ -196,19 +196,12 @@ def test_invalid_transaction_empty_strings():
     assert response.status_code == 422
 
 
-def test_negative_turnover_or_noi_or_debt_service():
-    """Verify 422 Unprocessable Entity for negative turnover, NOI, or debt_service."""
+def test_negative_turnover_or_debt_service():
+    """Verify 422 Unprocessable Entity for negative turnover or debt_service."""
     # Negative explicit turnover
     response = client.post(
         "/finance/calculate",
         json={"transactions": [], "explicit_turnover": -100.0, "net_operating_income": 10.0, "debt_service": 5.0},
-    )
-    assert response.status_code == 422
-
-    # Negative NOI
-    response = client.post(
-        "/finance/calculate",
-        json={"transactions": [], "net_operating_income": -10.0, "debt_service": 5.0},
     )
     assert response.status_code == 422
 
@@ -218,6 +211,17 @@ def test_negative_turnover_or_noi_or_debt_service():
         json={"transactions": [], "net_operating_income": 10.0, "debt_service": -5.0},
     )
     assert response.status_code == 422
+
+
+def test_negative_net_operating_income_accepted():
+    """Verify that legitimate negative operating income (operational deficit) is accepted and yields negative DSCR."""
+    response = client.post(
+        "/finance/calculate",
+        json={"transactions": [], "net_operating_income": -10.0, "debt_service": 5.0},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["dscr"] == -2.0
 
 
 def test_malformed_request_body():

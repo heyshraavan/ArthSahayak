@@ -120,7 +120,6 @@ export const FinancialMetricCards: React.FC<FinancialMetricCardsProps> = ({
 
   // 3. Render Metric Cards
   const isSurplus = summary.net_cash_flow >= 0;
-  const isBackendData = dataSource === 'backend';
 
   return (
     <section className="space-y-3" aria-labelledby="financial-metrics-heading">
@@ -130,8 +129,8 @@ export const FinancialMetricCards: React.FC<FinancialMetricCardsProps> = ({
           {language === 'hi' ? 'वित्तीय स्थिति सारांश' : 'Financial Health Snapshot'}
         </h2>
 
-        {/* Real Backend Data Indicator */}
-        {isBackendData ? (
+        {/* Provenance Badge */}
+        {dataSource === 'backend' && (
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-full shadow-2xs">
             <Server className="w-3 h-3 text-emerald-700" aria-hidden="true" />
             <span>
@@ -140,7 +139,18 @@ export const FinancialMetricCards: React.FC<FinancialMetricCardsProps> = ({
                 : 'Calculated by ArthSahayak Finance Engine'}
             </span>
           </span>
-        ) : (
+        )}
+        {dataSource === 'local' && (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-900 bg-blue-100 border border-blue-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-700" aria-hidden="true" />
+            <span>
+              {language === 'hi'
+                ? 'डिवाइस पर गणना की गई (ऑफ़लाइन मोड)'
+                : 'Calculated On-Device (Offline Mode)'}
+            </span>
+          </span>
+        )}
+        {dataSource === 'demo' && (
           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full">
             <AlertCircle className="w-3 h-3 text-amber-700" aria-hidden="true" />
             <span>{language === 'hi' ? 'डेमो डेटा (Not from Backend)' : 'DEMO DATA (Offline Fallback)'}</span>
@@ -250,13 +260,48 @@ export const FinancialMetricCards: React.FC<FinancialMetricCardsProps> = ({
         {/* DSCR Indicator */}
         <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
           <span className="text-slate-600 font-medium">
-            {language === 'hi' ? 'ऋण भुगतान क्षमता (DSCR):' : 'Debt Service Coverage (DSCR):'}
+            {language === 'hi' ? 'ऋण चुकौती कवरेज (प्रॉक्सी DSCR):' : 'Debt Repayment Coverage (Proxy DSCR):'}
           </span>
-          <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            {summary.dscr !== null ? `${summary.dscr}x (${language === 'hi' ? 'सुरक्षित' : 'Adequate'})` : 'N/A'}
+          <span
+            className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded ${
+              summary.dscr === null
+                ? 'text-slate-700 bg-slate-100'
+                : summary.dscr >= 1.5
+                ? 'text-emerald-800 bg-emerald-50'
+                : summary.dscr >= 1.0
+                ? 'text-amber-800 bg-amber-50'
+                : 'text-rose-800 bg-rose-50'
+            }`}
+          >
+            {summary.dscr === null ? (
+              <span>{language === 'hi' ? 'कोई दर्ज ऋण चुकौती नहीं (N/A)' : 'N/A (No Recorded Debt)'}</span>
+            ) : (
+              <>
+                {summary.dscr >= 1.5 ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                )}
+                <span>
+                  {summary.dscr}x (
+                  {summary.dscr >= 1.5
+                    ? (language === 'hi' ? 'सुरक्षित' : 'Adequate')
+                    : summary.dscr >= 1.0
+                    ? (language === 'hi' ? 'मध्यम' : 'Moderate')
+                    : summary.dscr >= 0.0
+                    ? (language === 'hi' ? 'कम' : 'Low')
+                    : (language === 'hi' ? 'घाटा' : 'Deficit')}
+                  )
+                </span>
+              </>
+            )}
           </span>
         </div>
+        <p className="text-[10px] text-slate-500 mt-1.5 leading-tight">
+          {language === 'hi'
+            ? '*अनुमान बही-खाते में दर्ज ऋण चुकौती पर आधारित है, औपचारिक सत्यापित वार्षिक ऋण दायित्व पर नहीं।'
+            : '*Proxy derived from recorded loan repayment transactions in ledger, not a verified annual debt service obligation.'}
+        </p>
       </article>
     </section>
   );

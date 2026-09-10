@@ -86,10 +86,27 @@ export const AppraisalPage: React.FC<AppraisalPageProps> = ({ financialSummary, 
           </div>
           <div className="flex justify-between py-1.5">
             <span className="text-slate-500">
-              {language === 'hi' ? 'ऋण सेवा अनुपात (DSCR):' : 'Debt Service Coverage (DSCR):'}
+              {language === 'hi' ? 'ऋण चुकौती कवरेज (प्रॉक्सी DSCR):' : 'Debt Repayment Coverage (Proxy DSCR):'}
             </span>
-            <span className="font-bold text-emerald-700">{financialSummary.dscr ?? 'N/A'}x</span>
+            <span
+              className={`font-bold ${
+                financialSummary.dscr === null
+                  ? 'text-slate-600'
+                  : financialSummary.dscr >= 1.5
+                  ? 'text-emerald-700'
+                  : financialSummary.dscr >= 1.0
+                  ? 'text-amber-700'
+                  : 'text-rose-700'
+              }`}
+            >
+              {financialSummary.dscr !== null ? `${financialSummary.dscr}x` : 'N/A'}
+            </span>
           </div>
+          <p className="text-[10px] text-slate-500 pb-1 leading-tight">
+            {language === 'hi'
+              ? '*अनुमान बही-खाते में दर्ज ऋण चुकौती पर आधारित है, औपचारिक सत्यापित वार्षिक ऋण दायित्व पर नहीं।'
+              : '*Proxy derived from recorded ledger loan repayments, not a verified annual debt obligation.'}
+          </p>
         </div>
 
         <div className="pt-2">
