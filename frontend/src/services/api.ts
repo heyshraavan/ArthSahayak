@@ -5,7 +5,10 @@ import type {
   OcrExtractionResponse,
 } from '../types';
 
-const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'http://127.0.0.1:8000';
+const RAW_API_BASE_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+  'http://127.0.0.1:8000';
+const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, '');
 
 export class ApiError extends Error {
   status?: number;

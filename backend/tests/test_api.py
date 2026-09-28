@@ -439,3 +439,41 @@ def test_dossier_generate_does_not_perform_financial_calculations(monkeypatch):
     assert passed_data.financial_summary.maximum_permissible_bank_finance == 24691.2
 
 
+def test_cors_preflight_production_origin():
+    """Verify OPTIONS preflight request succeeds for production Vercel frontend origin."""
+    headers = {
+        "Origin": "https://arth-sahayak.vercel.app",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+    }
+    response = client.options("/finance/calculate", headers=headers)
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://arth-sahayak.vercel.app"
+    assert "POST" in response.headers.get("access-control-allow-methods", "")
+
+
+def test_cors_preflight_localhost_origins():
+    """Verify OPTIONS preflight request succeeds for localhost origins."""
+    for origin in ["http://localhost:5173", "http://127.0.0.1:5173"]:
+        headers = {
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        }
+        response = client.options("/voice/transcribe", headers=headers)
+        assert response.status_code == 200
+        assert response.headers.get("access-control-allow-origin") == origin
+
+
+def test_cors_unauthorized_origin_rejected():
+    """Verify unauthorized origins do not receive access-control-allow-origin header."""
+    headers = {
+        "Origin": "https://unauthorized-evil-site.com",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+    }
+    response = client.options("/finance/calculate", headers=headers)
+    assert response.headers.get("access-control-allow-origin") != "https://unauthorized-evil-site.com"
+
+
+

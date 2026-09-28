@@ -1,4 +1,5 @@
 import base64
+import os
 from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
@@ -40,11 +41,21 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Explicitly restricted to local Vite development server
-origins = [
+# Allowed CORS origins: local Vite development and production Vercel frontend
+default_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://arth-sahayak.vercel.app",
 ]
+
+# Allow additional origins via CORS_ORIGINS environment variable (comma-separated)
+extra_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+origins = list(dict.fromkeys(default_origins + extra_origins))
 
 app.add_middleware(
     CORSMiddleware,
