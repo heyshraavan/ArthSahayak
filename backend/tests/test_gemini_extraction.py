@@ -36,49 +36,31 @@ from app.voice_engine import (
 client = TestClient(app)
 
 
-def test_provider_selection_without_gemini_api_key(monkeypatch):
-    """When GEMINI_API_KEY is absent, StubExtractionProvider is selected.
-
-    Application startup never crashes due to an absent key.
-    """
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    provider = get_extraction_provider()
-    assert isinstance(provider, StubExtractionProvider)
-
-
-def test_provider_selection_with_gemini_api_key(monkeypatch):
-    """When GEMINI_API_KEY is present, GeminiExtractionProvider is selected with default model."""
-    monkeypatch.setenv("GEMINI_API_KEY", "mock_gemini_api_key_xyz987")
-    provider = get_extraction_provider()
-    assert isinstance(provider, GeminiExtractionProvider)
+def test_gemini_provider_direct_instantiation(monkeypatch):
+    """When initialized with API key, GeminiExtractionProvider uses default model."""
+    provider = GeminiExtractionProvider(api_key="mock_gemini_api_key_xyz987")
     assert provider.api_key == "mock_gemini_api_key_xyz987"
     assert provider.model == DEFAULT_GEMINI_MODEL
-    assert provider.model == "gemini-3.5-flash"
-    assert DEFAULT_GEMINI_MODEL == "gemini-3.5-flash"
+    assert provider.model == "gemini-3.1-flash-lite"
+    assert DEFAULT_GEMINI_MODEL == "gemini-3.1-flash-lite"
 
 
 def test_gemini_extraction_model_configurable_via_env(monkeypatch):
-    """Verify GEMINI_MODEL environment variable overrides default model."""
-    monkeypatch.setenv("GEMINI_API_KEY", "mock_gemini_api_key_xyz987")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
-    provider = get_extraction_provider()
-    assert isinstance(provider, GeminiExtractionProvider)
-    assert provider.model == "gemini-3.5-flash-lite"
+    """Verify GEMINI_MODEL environment variable overrides default model for GeminiExtractionProvider."""
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash")
+    provider = GeminiExtractionProvider(api_key="mock_gemini_api_key_xyz987")
+    assert provider.model == "gemini-3.5-flash"
 
 
-def test_gemini_model_configuration_consistency_across_both_providers(monkeypatch):
-    """Verify both voice extraction and OCR providers use the same configured model from GEMINI_MODEL."""
+def test_gemini_model_configuration_consistency_across_ocr(monkeypatch):
+    """Verify OCR provider uses the configured model from GEMINI_MODEL."""
     monkeypatch.setenv("GEMINI_API_KEY", "mock_gemini_api_key_xyz987")
     monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
 
     from app.services.ocr import get_ocr_provider
 
-    voice_provider = get_extraction_provider()
     ocr_provider = get_ocr_provider()
-
-    assert voice_provider.model == "gemini-3.8-flash"
     assert ocr_provider.model == "gemini-3.8-flash"
-    assert voice_provider.model == ocr_provider.model
 
 
 
@@ -127,7 +109,7 @@ def test_gemini_extraction_success_mocked():
     # Verify generate_content call
     mock_genai_client.models.generate_content.assert_called_once()
     _, kwargs = mock_genai_client.models.generate_content.call_args
-    assert kwargs["model"] == "gemini-3.5-flash"
+    assert kwargs["model"] == "gemini-3.1-flash-lite"
     config = kwargs["config"]
     assert config.temperature == 0.0
     assert config.response_mime_type == "application/json"
@@ -281,7 +263,7 @@ def test_api_endpoint_gemini_503_unavailable_returns_502(monkeypatch):
     mock_genai_client.models.generate_content.side_effect = Exception(
         "503 UNAVAILABLE: This model is currently experiencing high demand."
     )
-    mock_provider = GeminiExtractionProvider(api_key="mock_key", client=mock_genai_client)
+    mock_provider = GeminiExtractionProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=MagicMock())
 
     with patch("app.main.get_extraction_provider", return_value=mock_provider):
         resp = client.post("/voice/extract", json={"transcript": "Sold 2 tables for 5000"})
@@ -289,7 +271,7 @@ def test_api_endpoint_gemini_503_unavailable_returns_502(monkeypatch):
     assert resp.status_code == 502
     detail = resp.json()["detail"]
     assert "Upstream extraction error" in detail
-    assert "gemini-3.5-flash" in detail
+    assert "gemini-3.1-flash-lite" in detail
     assert "503 UNAVAILABLE" in detail
 
 
@@ -385,25 +367,12 @@ def test_voice_extract_does_not_mutate_ledger_or_calculate_finance(monkeypatch):
     assert "working_capital_requirement" not in data
 
 
-def test_provider_selection_missing_key_disallowing_stubs(monkeypatch):
-    """When GEMINI_API_KEY is absent and stubs are disallowed, VoiceConfigurationError is raised."""
+def test_gemini_provider_missing_key_disallowing_stubs(monkeypatch):
+    """When initializing GeminiExtractionProvider directly with empty key, VoiceConfigurationError is raised."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setenv("ALLOW_STUB_PROVIDERS", "false")
     with pytest.raises(VoiceConfigurationError) as exc_info:
-        get_extraction_provider()
+        GeminiExtractionProvider(api_key="")
     assert "GEMINI_API_KEY is not configured" in str(exc_info.value)
-
-
-def test_extract_endpoint_missing_credentials_returns_503(monkeypatch):
-    """When GEMINI_API_KEY is missing in production mode, endpoint returns HTTP 503 Service Unavailable."""
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setenv("ALLOW_STUB_PROVIDERS", "false")
-    response = client.post(
-        "/voice/extract",
-        json={"transcript": "Received 2000 from customer for repair work"},
-    )
-    assert response.status_code == 503
-    assert "GEMINI_API_KEY is not configured" in response.json().get("detail", "")
 
 
 def test_dynamic_extraction_based_on_transcript():
@@ -518,4 +487,103 @@ def test_gemini_extraction_strips_markdown_code_fences_from_json_fallback():
     assert result["amount"] == 600.0
     assert result["tx_type"] == "debit"
     assert result["category"] == "operating_expense"
+
+
+def test_gemini_extraction_retries_on_503_and_succeeds():
+    """Verify Gemini voice extraction retries on transient 503 error and succeeds on subsequent attempt."""
+    mock_genai_client = MagicMock()
+    mock_response = MagicMock()
+    mock_extraction = GeminiTransactionExtraction(
+        date="2026-09-12",
+        party_name="Gupta Timber",
+        item="Teak Wood",
+        amount=5000.0,
+        tx_type="debit",
+        category="raw_material",
+    )
+    mock_response.parsed = mock_extraction
+    mock_response.text = json.dumps(mock_extraction.model_dump())
+
+    mock_sleep = MagicMock()
+    mock_genai_client.models.generate_content.side_effect = [
+        Exception("503 UNAVAILABLE: This model is currently experiencing high demand."),
+        mock_response,
+    ]
+
+    provider = GeminiExtractionProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=mock_sleep)
+    result = provider.extract("Paid 5000 to Gupta Timber for teak wood")
+
+    assert result["party_name"] == "Gupta Timber"
+    assert result["amount"] == 5000.0
+    assert mock_genai_client.models.generate_content.call_count == 2
+    assert mock_sleep.call_count == 1
+    mock_sleep.assert_called_once_with(0.5)
+
+
+def test_gemini_extraction_retries_on_429_and_succeeds():
+    """Verify Gemini voice extraction retries on transient 429 rate limit error and succeeds."""
+    mock_genai_client = MagicMock()
+    mock_response = MagicMock()
+    mock_extraction = GeminiTransactionExtraction(
+        date="2026-09-12",
+        party_name="Kiran Tea Stall",
+        item="Morning Tea",
+        amount=150.0,
+        tx_type="debit",
+        category="operating_expense",
+    )
+    mock_response.parsed = mock_extraction
+    mock_response.text = json.dumps(mock_extraction.model_dump())
+
+    mock_sleep = MagicMock()
+    mock_genai_client.models.generate_content.side_effect = [
+        Exception("429 RESOURCE_EXHAUSTED: Rate limit exceeded. Please try again later."),
+        mock_response,
+    ]
+
+    provider = GeminiExtractionProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=mock_sleep)
+    result = provider.extract("Paid 150 for morning tea at Kiran Tea Stall")
+
+    assert result["party_name"] == "Kiran Tea Stall"
+    assert result["amount"] == 150.0
+    assert mock_genai_client.models.generate_content.call_count == 2
+    assert mock_sleep.call_count == 1
+
+
+def test_gemini_extraction_does_not_retry_on_invalid_api_key():
+    """Verify Gemini voice extraction fails immediately on 401/403 auth error with ZERO retries."""
+    mock_genai_client = MagicMock()
+    mock_sleep = MagicMock()
+    mock_genai_client.models.generate_content.side_effect = Exception(
+        "401 UNAUTHENTICATED: API_KEY_INVALID. Please pass a valid API key."
+    )
+
+    provider = GeminiExtractionProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=mock_sleep)
+    with pytest.raises(ExtractionError) as exc_info:
+        provider.extract("Paid 200 for nails")
+
+    assert "API_KEY_INVALID" in str(exc_info.value)
+    # Must fail immediately on attempt 1 without retrying
+    assert mock_genai_client.models.generate_content.call_count == 1
+    assert mock_sleep.call_count == 0
+
+
+def test_gemini_extraction_fails_after_max_attempts_exhausted():
+    """Verify Gemini voice extraction raises ExtractionError after 3 failed transient attempts."""
+    mock_genai_client = MagicMock()
+    mock_sleep = MagicMock()
+    mock_genai_client.models.generate_content.side_effect = Exception(
+        "503 UNAVAILABLE: Server overloaded"
+    )
+
+    provider = GeminiExtractionProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=mock_sleep)
+    with pytest.raises(ExtractionError) as exc_info:
+        provider.extract("Paid 200 for nails")
+
+    assert "503 UNAVAILABLE" in str(exc_info.value)
+    assert mock_genai_client.models.generate_content.call_count == 3
+    assert mock_sleep.call_count == 2
+    assert mock_sleep.call_args_list[0][0][0] == 0.5
+    assert mock_sleep.call_args_list[1][0][0] == 1.0
+
 

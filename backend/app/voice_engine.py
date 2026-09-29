@@ -4,7 +4,7 @@ Architecture:
 Audio
 -> TranscriptionProvider (Groq Whisper / Stub)
 -> transcript
--> ExtractionProvider (Gemini / Stub)
+-> ExtractionProvider (Groq LLM / Gemini / Stub)
 -> untrusted suggested transaction
 -> Pydantic validation
 -> human review/edit
@@ -18,12 +18,13 @@ import logging
 import os
 import re
 import time
-from typing import Any, Literal, Optional, Protocol
+from typing import Any, Callable, Literal, Optional, Protocol
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, ValidationError
 
 from app.schemas import Transaction, TransactionCategory
+from app.services.gemini_retry import call_gemini_with_retry
 
 load_dotenv()
 
@@ -31,16 +32,33 @@ logger = logging.getLogger("arthsahayak.voice")
 
 MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB application limit
 
-DEFAULT_GEMINI_MODEL: str = "gemini-3.5-flash"
+DEFAULT_GROQ_EXTRACTION_MODEL: str = "llama-3.1-8b-instant"
+DEFAULT_GEMINI_MODEL: str = "gemini-3.1-flash-lite"
+
+
+def resolve_groq_extraction_model(model: Optional[str] = None) -> str:
+    """Resolve active Groq model for structured transaction extraction.
+
+    Priority:
+    1. GROQ_EXTRACTION_MODEL environment variable (if explicitly configured)
+    2. Explicit model argument passed to constructor (if provided)
+    3. DEFAULT_GROQ_EXTRACTION_MODEL ('llama-3.1-8b-instant')
+    """
+    env_model = os.environ.get("GROQ_EXTRACTION_MODEL", "").strip()
+    if env_model:
+        return env_model
+    if model and model.strip():
+        return model.strip()
+    return DEFAULT_GROQ_EXTRACTION_MODEL
 
 
 def resolve_gemini_model(model: Optional[str] = None) -> str:
-    """Resolve the active Gemini model name consistently across extraction and OCR.
+    """Resolve the active Gemini model name for OCR / legacy Gemini extraction.
 
     Priority:
     1. GEMINI_MODEL environment variable (if explicitly configured)
     2. Explicit model argument passed to constructor (if provided)
-    3. DEFAULT_GEMINI_MODEL ('gemini-2.5-flash')
+    3. DEFAULT_GEMINI_MODEL ('gemini-3.1-flash-lite')
     """
     env_model = os.environ.get("GEMINI_MODEL", "").strip()
     if env_model:
@@ -297,6 +315,129 @@ class GeminiTransactionExtraction(BaseModel):
     )
 
 
+class GroqExtractionProvider:
+    """Real structured transaction extraction provider using Groq LLM (default: llama-3.1-8b-instant).
+
+    Strictly server-side integration. The API key is read from GROQ_API_KEY environment
+    variable or passed during initialization. Never hard-coded, never committed.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        client: Optional[Any] = None,
+    ) -> None:
+        self.api_key = (api_key or os.environ.get("GROQ_API_KEY", "")).strip()
+        if not self.api_key:
+            raise VoiceConfigurationError(
+                "GROQ_API_KEY is not configured. Provide an API key or set GROQ_API_KEY environment variable."
+            )
+        self.model = resolve_groq_extraction_model(model)
+        if client is not None:
+            self._client = client
+        else:
+            try:
+                from groq import Groq
+                self._client = Groq(api_key=self.api_key, max_retries=2, timeout=20.0)
+            except ImportError as e:
+                raise VoiceConfigurationError(f"Groq SDK is not installed: {e}") from e
+
+    def extract(self, transcript: str) -> dict[str, Any]:
+        """Extract untrusted suggested transaction from transcript text using Groq LLM.
+
+        Enforces non-empty transcript, invokes Groq chat completion with JSON mode,
+        and parses raw dictionary with fallback for date.
+        """
+        cleaned = transcript.strip()
+        if not cleaned:
+            logger.warning("Empty transcript received for Groq extraction")
+            raise ExtractionError("Transcript is empty")
+
+        system_prompt = (
+            "You are an expert financial assistant for ArthSahayak, an accounting platform for Indian rural micro-enterprises.\n"
+            "Extract transaction details from the user's spoken transcript into a strict JSON object with these exact keys:\n"
+            "- date: string in 'YYYY-MM-DD' format (or null if not mentioned)\n"
+            "- party_name: string (customer/vendor name, or 'Unknown Party' if unspecified)\n"
+            "- item: string (goods/service description, or 'General Item' if unspecified)\n"
+            "- amount: non-negative number in INR\n"
+            "- tx_type: 'credit' (income, sales, money received, loan received) or 'debit' (payments made, purchases, expenses, repayments, drawings)\n"
+            "- category: exactly one of: 'sales', 'raw_material', 'operating_expense', 'loan_disbursement', 'capital_injection', 'loan_repayment', 'personal_drawings', 'refund', 'other'\n"
+            "CRITICAL RULES:\n"
+            "1. Output ONLY a valid JSON object matching the keys above.\n"
+            "2. Never fabricate PII (no Aadhaar, PAN, phone numbers).\n"
+            "3. If tx_type is credit, category is usually 'sales' (or 'loan_disbursement'/'capital_injection').\n"
+            "4. If tx_type is debit, category is usually 'raw_material' (supplies/stock), 'operating_expense' (wages/rent/chai), 'loan_repayment', or 'personal_drawings'.\n"
+            "5. If party_name is missing, use 'Unknown Party'. If item is missing, use 'General Item'."
+        )
+
+        user_prompt = f"Extract the transaction details from this spoken transcript:\n\"\"\"{cleaned}\"\"\""
+
+        start_time = time.perf_counter()
+        logger.info(
+            "Groq extraction starting: transcript_len=%d chars, model=%s",
+            len(cleaned),
+            self.model,
+        )
+
+        try:
+            chat_completion = self._client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.0,
+                response_format={"type": "json_object"},
+            )
+        except Exception as err:
+            logger.error("Groq extraction failed (model=%s): %s: %s", self.model, type(err).__name__, err)
+            raise ExtractionError(f"Groq extraction failed (model={self.model}): {err}") from err
+
+        try:
+            choice = chat_completion.choices[0]
+            raw_text = choice.message.content.strip() if choice.message and choice.message.content else ""
+        except (AttributeError, IndexError) as err:
+            logger.error("Malformed Groq response structure: %s", err)
+            raise ExtractionError(f"Malformed Groq response: {err}") from err
+
+        if not raw_text:
+            logger.error("Groq returned empty extraction output")
+            raise ExtractionError("Groq returned empty extraction output")
+
+        try:
+            if raw_text.startswith("```"):
+                lines = raw_text.splitlines()
+                if lines and lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip().startswith("```"):
+                    lines = lines[:-1]
+                raw_text = "\n".join(lines).strip()
+            raw_dict = json.loads(raw_text)
+        except Exception as json_err:
+            logger.error("Failed to parse Groq JSON output: %s (raw text: %s)", json_err, raw_text)
+            raise ExtractionError(f"Failed to parse Groq JSON output: {json_err}") from json_err
+
+        if not isinstance(raw_dict, dict):
+            logger.error("Groq extraction output is not a JSON object: %s", type(raw_dict))
+            raise ExtractionError("Groq extraction output must be a JSON object")
+
+        # Fill date fallback if speaker did not provide date
+        if not raw_dict.get("date"):
+            raw_dict["date"] = date.today()
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "Groq extraction succeeded in %.1fms: party=%s, amount=%s, category=%s",
+            duration_ms,
+            raw_dict.get("party_name"),
+            raw_dict.get("amount"),
+            raw_dict.get("category"),
+        )
+
+        return raw_dict
+
+
 class GeminiExtractionProvider:
     """Real structured transaction extraction provider using Google GenAI SDK (Gemini).
 
@@ -309,6 +450,7 @@ class GeminiExtractionProvider:
         api_key: Optional[str] = None,
         model: Optional[str] = None,
         client: Optional[Any] = None,
+        sleep_fn: Optional[Callable[[float], None]] = None,
     ) -> None:
         self.api_key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
         if not self.api_key:
@@ -316,6 +458,7 @@ class GeminiExtractionProvider:
                 "GEMINI_API_KEY is not configured. Provide an API key or set GEMINI_API_KEY environment variable."
             )
         self.model = resolve_gemini_model(model)
+        self.sleep_fn = sleep_fn or time.sleep
         if client is not None:
             self._client = client
         else:
@@ -338,18 +481,15 @@ class GeminiExtractionProvider:
 
         today_str = date.today().isoformat()
         prompt = (
-            f"You are an expert rural micro-enterprise accounting assistant in India.\n"
-            f"Extract the structured transaction from this voice transcript spoken in English, Hindi, or local dialect.\n\n"
-            f"Today's date is: {today_str}\n\n"
-            f"Transcript:\n\"{cleaned}\"\n\n"
+            f"Extract the business transaction from this voice transcript spoken in English, Hindi, or regional dialect.\n"
+            f"Today: {today_str}\n"
+            f"Transcript: \"{cleaned}\"\n"
             f"Rules:\n"
-            f"1. Extract: date (YYYY-MM-DD), party_name, item, amount, tx_type ('credit' or 'debit'), and category.\n"
-            f"2. If date is not mentioned in speech, use today's date ({today_str}).\n"
-            f"3. Never invent missing business facts. If party or item is genuinely unknown, use 'Unknown Party' or 'General Item'.\n"
-            f"4. Category must be strictly one of: sales, raw_material, operating_expense, loan_disbursement, "
-            f"capital_injection, loan_repayment, personal_drawings, refund, other.\n"
-            f"5. Do not calculate turnover, working capital, or any financial metric.\n"
-            f"6. Do not extract or handle any Aadhaar, PAN, or sensitive identity documents."
+            f"1. date: YYYY-MM-DD (use {today_str} if unspecified in speech).\n"
+            f"2. tx_type: 'credit' (inflow/sales/loan received) or 'debit' (outflow/purchase/expense/wage/repayment).\n"
+            f"3. category: sales, raw_material, operating_expense, loan_disbursement, capital_injection, loan_repayment, personal_drawings, refund, other.\n"
+            f"4. party_name & item: use 'Unknown Party' / 'General Item' if unspecified.\n"
+            f"5. No Aadhaar, PAN, or financial metrics."
         )
 
         start_time = time.perf_counter()
@@ -362,7 +502,8 @@ class GeminiExtractionProvider:
         try:
             from google.genai import types
 
-            response = self._client.models.generate_content(
+            response = call_gemini_with_retry(
+                self._client.models.generate_content,
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -371,6 +512,7 @@ class GeminiExtractionProvider:
                     temperature=0.0,
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 ),
+                sleep_fn=self.sleep_fn,
             )
         except Exception as err:
             logger.error("Gemini extraction failed (model=%s): %s: %s", self.model, type(err).__name__, err)
@@ -544,15 +686,15 @@ def get_extraction_provider(
 ) -> ExtractionProvider:
     """Resolve active extraction provider based on environment configuration.
 
-    If GEMINI_API_KEY is present and non-empty, selects GeminiExtractionProvider.
-    If GEMINI_API_KEY is absent or empty:
+    If GROQ_API_KEY is present and non-empty, selects GroqExtractionProvider (llama-3.1-8b-instant).
+    If GROQ_API_KEY is absent or empty:
     - If allow_stub is True or ALLOW_STUB_PROVIDERS is enabled ('true', '1', 'yes'),
       selects StubExtractionProvider for offline testing.
     - Otherwise raises VoiceConfigurationError with clear instructions.
     """
-    key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
+    key = (api_key or os.environ.get("GROQ_API_KEY", "")).strip()
     if key:
-        return GeminiExtractionProvider(api_key=key)
+        return GroqExtractionProvider(api_key=key)
 
     is_stub_allowed = (
         allow_stub
@@ -561,12 +703,12 @@ def get_extraction_provider(
     )
     if is_stub_allowed:
         logger.warning(
-            "GEMINI_API_KEY is absent. Using StubExtractionProvider because ALLOW_STUB_PROVIDERS is enabled."
+            "GROQ_API_KEY is absent. Using StubExtractionProvider because ALLOW_STUB_PROVIDERS is enabled."
         )
         return StubExtractionProvider()
 
     raise VoiceConfigurationError(
-        "GEMINI_API_KEY is not configured on the server. Structured transaction extraction requires a valid Gemini API key."
+        "GROQ_API_KEY is not configured on the server. Structured transaction extraction requires a valid Groq API key."
     )
 
 

@@ -14,12 +14,13 @@ import logging
 import os
 import re
 import time
-from typing import Any, Literal, Optional, Protocol
+from typing import Any, Callable, Literal, Optional, Protocol
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from app.schemas import TransactionCategory
+from app.services.gemini_retry import call_gemini_with_retry
 from app.voice_engine import DEFAULT_GEMINI_MODEL, resolve_gemini_model, validate_suggested_transaction
 
 load_dotenv()
@@ -256,6 +257,7 @@ class GeminiOcrProvider:
         api_key: Optional[str] = None,
         model: Optional[str] = None,
         client: Optional[Any] = None,
+        sleep_fn: Optional[Callable[[float], None]] = None,
     ) -> None:
         self.api_key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
         if not self.api_key:
@@ -263,6 +265,7 @@ class GeminiOcrProvider:
                 "GEMINI_API_KEY is not configured. Provide an API key or set GEMINI_API_KEY environment variable."
             )
         self.model = resolve_gemini_model(model)
+        self.sleep_fn = sleep_fn or time.sleep
         if client is not None:
             self._client = client
         else:
@@ -284,87 +287,36 @@ class GeminiOcrProvider:
         today_str = date.today().isoformat()
         prompt = (
             f"You are an expert rural micro-enterprise accounting assistant in India.\n"
-            f"Your task is to inspect this photograph of a physical handwritten paper slip, receipt, "
-            f"voucher, or bahi-khata (खाता बही) ledger page, and extract ALL distinct financial transactions.\n\n"
+            f"Extract all distinct business transactions from this physical receipt, slip, voucher, or bahi-khata ledger image.\n"
             f"Today's date is: {today_str}\n\n"
-            f"CRITICAL LEDGER PERSPECTIVE & DIRECTION RULES:\n"
-            f"1. LEDGER PERSPECTIVE:\n"
-            f"   - The ledger represents the micro-entrepreneur's business.\n"
-            f"   - All transactions MUST be classified strictly from the perspective of this micro-entrepreneur's business.\n"
-            f"   - You must infer whether the document represents:\n"
-            f"     * Money entering the entrepreneur's business (credit / जमा)\n"
-            f"     * Money leaving the entrepreneur's business (debit / नामे / खर्च)\n\n"
-            f"2. DO NOT CLASSIFY SOLELY BASED ON DOCUMENT LABELS:\n"
-            f"   - Do NOT classify a document simply based on the presence of words like: 'bill', 'receipt', 'total', 'cash', 'पर्चा', 'कैश मेमो'.\n"
-            f"   - A bill, slip, or receipt from an external establishment (e.g. restaurant, dhaba, tea stall, hotel, fuel pump, repair shop, or retail vendor) "
-            f"     represents money LEAVING the entrepreneur's business. It is a DEBIT (operating_expense or raw_material), NEVER a sales credit!\n"
-            f"   - A document represents 'credit + sales' ONLY when it is a record of the micro-entrepreneur selling their own products or services to a customer, "
-            f"     or receiving payment from a buyer.\n\n"
-            f"3. MANDATORY SEMANTIC CLASSIFICATION RULES & EXAMPLES:\n"
-            f"   - Business receives money from customer for its product/service:\n"
-            f"     credit + sales\n"
-            f"   - Business pays supplier for raw materials:\n"
-            f"     debit + raw_material\n"
-            f"   - Business pays wages/labour:\n"
-            f"     debit + operating_expense\n"
-            f"   - Business pays restaurant/food/travel/utilities/other business expenses:\n"
-            f"     debit + operating_expense\n"
-            f"   - Business receives a loan:\n"
-            f"     credit + loan_disbursement\n"
-            f"   - Business repays loan principal:\n"
-            f"     debit + loan_repayment\n"
-            f"   - Business owner puts own money into business:\n"
-            f"     credit + capital_injection\n"
-            f"   - Business owner takes money out for personal use:\n"
-            f"     debit + personal_drawings\n\n"
-            f"4. IDENTITY DOCUMENT REJECTION:\n"
-            f"   - Check if this image contains an identity document, government ID, or demographic certificate "
-            f"     (e.g., Aadhaar card, PAN card, Voter ID, driving license, passport, caste certificate / जाति प्रमाण पत्र, "
-            f"     domicile certificate, or ration card).\n"
-            f"   - If it is ANY form of identity document:\n"
-            f"     Set \"is_identity_document\": true\n"
-            f"     Set \"rejection_reason\": \"<describe document type, e.g. 'Aadhaar card detected'>\"\n"
-            f"     Set \"transactions\": []\n"
-            f"     Do NOT extract transaction details.\n"
-            f"   - If it is a legitimate commercial slip, bahi-khata page, bill, receipt, or handwritten accounting note:\n"
-            f"     Set \"is_identity_document\": false\n"
-            f"     Set \"rejection_reason\": null\n\n"
-            f"5. MULTI-TRANSACTION LEDGERS VS. SINGLE RECEIPT WITH TOTAL:\n"
-            f"   - FOR A BAHI-KHATA (LEDGER) PAGE OR MULTIPLE ENTRIES:\n"
-            f"     * Extract ALL distinct business transactions that can be reliably identified.\n"
-            f"     * Treat each distinct debit/credit ledger row as a separate transaction.\n"
-            f"     * Do NOT collapse multiple independent ledger rows into one transaction.\n"
-            f"   - FOR A RECEIPT OR BILL WITH MULTIPLE LINE ITEMS AND ONE STATED TOTAL (e.g. restaurant bill, eatery slip, hardware store receipt):\n"
-            f"     * If individual items are clearly purchased together in a single transaction with a clearly stated total, "
-            f"       represent the receipt as ONE business transaction for the total amount.\n"
-            f"     * In the 'item' field, summarize the components (e.g. 'Meal Bill (Thali, Tea)').\n"
-            f"     * DO NOT DOUBLE-COUNT: Do not extract both the component items AND the receipt total as separate transactions.\n"
-            f"     * If it is a restaurant/meal/travel/utility bill, it is debit + operating_expense.\n\n"
-            f"6. TRANSLATION & INDIAN COMMERCIAL NOTATION:\n"
-            f"   - Understand Hindi, English, and regional Indian commercial terminology.\n"
-            f"   - Accounting notations:\n"
-            f"     * 'जमा' (Jama) = credit / inflow (payment received, customer sales, loan received)\n"
-            f"     * 'नामे' (Name) or 'खर्च' (Kharch) = debit / outflow (payment made, purchase, wage, expense)\n"
-            f"     * 'बाकी' / 'उधारी' (Udhaari) = balance / credit\n"
-            f"     * 'रोकड़' (Rokad) = cash\n"
-            f"     * Devanagari numerals (०, १, २, ३, ४, ५, ६, ७, ८, ९) and standard Arabic numerals.\n\n"
-            f"7. PRESERVE UNCERTAINTY - NEVER INVENT FACTS:\n"
-            f"   - Do NOT invent or hallucinate missing transaction facts.\n"
-            f"   - If party name is unreadable or absent, use 'Unknown Party'.\n"
-            f"   - If item description is unreadable or absent, use 'General Item'.\n"
-            f"   - If date is not visible on the slip, leave 'date': null (system will default to today).\n"
-            f"   - If amount is unreadable, leave null.\n\n"
-            f"8. TRANSACTION FIELDS (EACH ENTRY):\n"
-            f"   - date: YYYY-MM-DD if explicitly visible on slip/row, otherwise null.\n"
-            f"   - party_name: Customer, vendor, supplier, worker, or external party name.\n"
-            f"   - item: Description of goods, services, food, wages, or materials.\n"
-            f"   - amount: Non-negative number in INR (e.g. 146.0). The handwritten receipt total is an extracted value, not a calculated metric.\n"
+            f"CRITICAL LEDGER RULES:\n"
+            f"1. The ledger represents the micro-entrepreneur's business.\n"
+            f"   - Money entering the entrepreneur's business (credit / जमा)\n"
+            f"   - Money leaving the entrepreneur's business (debit / नामे / खर्च)\n"
+            f"2. Do NOT classify a document simply based on the presence of words like: 'bill', 'receipt', 'total', 'cash'.\n"
+            f"   Bills from external establishments (restaurant, dhaba, tea stall, hotel, fuel, repair) are DEBIT (operating_expense or raw_material), never sales.\n"
+            f"3. Mandatory semantic examples:\n"
+            f"   - Business receives money from customer for its product/service:\n     credit + sales\n"
+            f"   - Business pays supplier for raw materials:\n     debit + raw_material\n"
+            f"   - Business pays wages/labour:\n     debit + operating_expense\n"
+            f"   - Business pays restaurant/food/travel/utilities/other business expenses:\n     debit + operating_expense\n"
+            f"   - Business receives a loan:\n     credit + loan_disbursement\n"
+            f"   - Business repays loan principal:\n     debit + loan_repayment\n"
+            f"   - Business owner puts own money into business:\n     credit + capital_injection\n"
+            f"   - Business owner takes money out for personal use:\n     debit + personal_drawings\n"
+            f"4. Identity Document Rejection:\n"
+            f"   If image is a government or personal identity credential (Aadhaar, PAN, voter ID, passport, caste/ration card), "
+            f"set is_identity_document=true, rejection_reason='<type> detected', and transactions=[].\n"
+            f"5. Receipts with itemized components and a stated total: extract ONE transaction for stated total (do not double count).\n"
+            f"   Bahi-khata multi-row ledgers: extract each distinct row as a separate transaction.\n"
+            f"6. Fields (each transaction):\n"
+            f"   - date: YYYY-MM-DD if visible on the document, otherwise null.\n"
+            f"   - party_name: written party or 'Unknown Party'.\n"
+            f"   - item: item/service or 'General Item'.\n"
+            f"   - amount: non-negative number in INR.\n"
             f"   - tx_type: 'credit' or 'debit'.\n"
-            f"   - category: One of: sales, raw_material, operating_expense, loan_disbursement, "
-            f"     capital_injection, loan_repayment, personal_drawings, refund, other.\n\n"
-            f"9. PRIVACY & SAFETY:\n"
-            f"   - Do NOT extract Aadhaar numbers, PAN numbers, bank account numbers, or IFSC codes.\n"
-            f"   - Do NOT calculate turnover, working capital, interest, or any financial ratios."
+            f"   - category: sales, raw_material, operating_expense, loan_disbursement, capital_injection, loan_repayment, personal_drawings, refund, other.\n"
+            f"7. Privacy: Never extract Aadhaar numbers, PAN numbers, or bank account numbers."
         )
 
         clean_mime = mime_type.split(";")[0].strip().lower()
@@ -384,7 +336,8 @@ class GeminiOcrProvider:
                 mime_type=clean_mime,
             )
 
-            response = self._client.models.generate_content(
+            response = call_gemini_with_retry(
+                self._client.models.generate_content,
                 model=self.model,
                 contents=[image_part, prompt],
                 config=types.GenerateContentConfig(
@@ -393,6 +346,7 @@ class GeminiOcrProvider:
                     temperature=0.0,
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 ),
+                sleep_fn=self.sleep_fn,
             )
         except Exception as err:
             logger.error("Gemini OCR extraction failed (model=%s): %s: %s", self.model, type(err).__name__, err)

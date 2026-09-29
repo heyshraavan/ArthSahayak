@@ -490,7 +490,7 @@ def test_production_mode_missing_credentials_returns_503(monkeypatch):
     # 2. Voice extraction
     res_extract = client.post("/voice/extract", json={"transcript": "Sold 2 chairs for 1000"})
     assert res_extract.status_code == 503
-    assert "GEMINI_API_KEY is not configured" in res_extract.json().get("detail", "")
+    assert "GROQ_API_KEY is not configured" in res_extract.json().get("detail", "")
 
     # 3. OCR extraction
     res_ocr = client.post("/ocr/extract", json={"image_base64": "dGVzdA==", "mime_type": "image/jpeg"})

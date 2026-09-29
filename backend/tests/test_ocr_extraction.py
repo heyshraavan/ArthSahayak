@@ -70,16 +70,16 @@ def test_ocr_provider_selection_with_gemini_api_key(monkeypatch):
     assert isinstance(provider, GeminiOcrProvider)
     assert provider.api_key == "mock_gemini_vision_key_123"
     assert provider.model == DEFAULT_GEMINI_MODEL
-    assert provider.model == "gemini-3.5-flash"
+    assert provider.model == "gemini-3.1-flash-lite"
 
 
 def test_ocr_model_configurable_via_env(monkeypatch):
     """Verify GEMINI_MODEL environment variable overrides default OCR model."""
     monkeypatch.setenv("GEMINI_API_KEY", "mock_gemini_vision_key_123")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash")
     provider = get_ocr_provider()
     assert isinstance(provider, GeminiOcrProvider)
-    assert provider.model == "gemini-3.5-flash-lite"
+    assert provider.model == "gemini-3.5-flash"
 
 
 def test_gemini_ocr_provider_missing_key_raises_configuration_error(monkeypatch):
@@ -165,7 +165,7 @@ def test_gemini_vision_ocr_single_transaction_mocked():
     # Verify generate_content parameters
     mock_genai_client.models.generate_content.assert_called_once()
     _, kwargs = mock_genai_client.models.generate_content.call_args
-    assert kwargs["model"] == "gemini-3.5-flash"
+    assert kwargs["model"] == "gemini-3.1-flash-lite"
     assert len(kwargs["contents"]) == 2
     assert kwargs["config"].temperature == 0.0
     assert kwargs["config"].response_schema == GeminiOcrBatchExtraction
@@ -774,7 +774,7 @@ def test_api_endpoint_gemini_ocr_503_unavailable_returns_502(monkeypatch):
     mock_genai_client.models.generate_content.side_effect = Exception(
         "503 UNAVAILABLE: This model is currently experiencing high demand."
     )
-    mock_provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client)
+    mock_provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=MagicMock())
 
     fake_b64 = base64.b64encode(b"valid_image").decode("utf-8")
     with patch("app.main.get_ocr_provider", return_value=mock_provider):
@@ -783,7 +783,7 @@ def test_api_endpoint_gemini_ocr_503_unavailable_returns_502(monkeypatch):
     assert resp.status_code == 502
     detail = resp.json()["detail"]
     assert "Upstream OCR error" in detail
-    assert "gemini-3.5-flash" in detail
+    assert "gemini-3.1-flash-lite" in detail
     assert "503 UNAVAILABLE" in detail
 
 
@@ -1202,5 +1202,118 @@ def test_gemini_ocr_strips_markdown_code_fences_from_json_fallback():
     assert result["transactions"][0]["party_name"] == "Laxmi General Store"
     assert result["transactions"][0]["amount"] == 2400.0
     assert result["transactions"][0]["category"] == "raw_material"
+
+
+def test_gemini_ocr_retries_on_503_and_succeeds():
+    """Verify Gemini OCR retries on transient 503 error and succeeds on subsequent attempt."""
+    mock_genai_client = MagicMock()
+    mock_response = MagicMock()
+    mock_batch = GeminiOcrBatchExtraction(
+        is_identity_document=False,
+        rejection_reason=None,
+        transactions=[
+            GeminiOcrTransactionItem(
+                date="2026-09-12",
+                party_name="Gupta Timber",
+                item="Wood Planks",
+                amount=7500.0,
+                tx_type="debit",
+                category="raw_material",
+            )
+        ],
+        raw_text="Wood Planks 7500",
+    )
+    mock_response.parsed = mock_batch
+    mock_response.text = json.dumps(mock_batch.model_dump())
+
+    mock_sleep = MagicMock()
+    mock_genai_client.models.generate_content.side_effect = [
+        Exception("503 UNAVAILABLE: This model is currently experiencing high demand."),
+        mock_response,
+    ]
+
+    provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=mock_sleep)
+    result = provider.extract_from_image(b"fake_image_bytes", mime_type="image/jpeg")
+
+    assert result["transactions"][0]["party_name"] == "Gupta Timber"
+    assert result["transactions"][0]["amount"] == 7500.0
+    assert mock_genai_client.models.generate_content.call_count == 2
+    assert mock_sleep.call_count == 1
+    mock_sleep.assert_called_once_with(0.5)
+
+
+def test_gemini_ocr_retries_on_429_and_succeeds():
+    """Verify Gemini OCR retries on transient 429 rate limit error and succeeds."""
+    mock_genai_client = MagicMock()
+    mock_response = MagicMock()
+    mock_batch = GeminiOcrBatchExtraction(
+        is_identity_document=False,
+        rejection_reason=None,
+        transactions=[
+            GeminiOcrTransactionItem(
+                date="2026-09-12",
+                party_name="Verma Tea",
+                item="Tea and Snacks",
+                amount=220.0,
+                tx_type="debit",
+                category="operating_expense",
+            )
+        ],
+        raw_text="Verma Tea 220",
+    )
+    mock_response.parsed = mock_batch
+    mock_response.text = json.dumps(mock_batch.model_dump())
+
+    mock_sleep = MagicMock()
+    mock_genai_client.models.generate_content.side_effect = [
+        Exception("429 RESOURCE_EXHAUSTED: Rate limit exceeded."),
+        mock_response,
+    ]
+
+    provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=mock_sleep)
+    result = provider.extract_from_image(b"fake_image_bytes", mime_type="image/jpeg")
+
+    assert result["transactions"][0]["party_name"] == "Verma Tea"
+    assert result["transactions"][0]["amount"] == 220.0
+    assert mock_genai_client.models.generate_content.call_count == 2
+    assert mock_sleep.call_count == 1
+
+
+def test_gemini_ocr_does_not_retry_on_invalid_api_key():
+    """Verify Gemini OCR fails immediately on 401/403 auth error with ZERO retries."""
+    mock_genai_client = MagicMock()
+    mock_sleep = MagicMock()
+    mock_genai_client.models.generate_content.side_effect = Exception(
+        "403 PERMISSION_DENIED: The caller does not have permission / API key invalid"
+    )
+
+    provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=mock_sleep)
+    with pytest.raises(OcrError) as exc_info:
+        provider.extract_from_image(b"fake_image_bytes", mime_type="image/jpeg")
+
+    assert "PERMISSION_DENIED" in str(exc_info.value)
+    # Must fail immediately on attempt 1 without retrying
+    assert mock_genai_client.models.generate_content.call_count == 1
+    assert mock_sleep.call_count == 0
+
+
+def test_gemini_ocr_fails_after_max_attempts_exhausted():
+    """Verify Gemini OCR raises OcrError after 3 failed transient attempts."""
+    mock_genai_client = MagicMock()
+    mock_sleep = MagicMock()
+    mock_genai_client.models.generate_content.side_effect = Exception(
+        "503 UNAVAILABLE: High demand"
+    )
+
+    provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client, sleep_fn=mock_sleep)
+    with pytest.raises(OcrError) as exc_info:
+        provider.extract_from_image(b"fake_image_bytes", mime_type="image/jpeg")
+
+    assert "503 UNAVAILABLE" in str(exc_info.value)
+    assert mock_genai_client.models.generate_content.call_count == 3
+    assert mock_sleep.call_count == 2
+    assert mock_sleep.call_args_list[0][0][0] == 0.5
+    assert mock_sleep.call_args_list[1][0][0] == 1.0
+
 
 

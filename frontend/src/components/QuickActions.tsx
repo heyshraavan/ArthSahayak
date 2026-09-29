@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { getCategoryInfo, TRANSACTION_CATEGORIES } from '../lib/categories';
 import { normalizeDateString } from '../lib/dateUtils';
+import { optimizeImageForOcr } from '../lib/imageOptimizer';
 import { enqueueMedia } from '../lib/ledgerStorage';
 import { extractOcrTransactions } from '../services/api';
 import { BackendExtractionProvider } from '../services/extraction';
@@ -216,7 +217,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     setOcrState('idle');
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -224,20 +225,19 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     setOcrImageFile(file);
     setOcrError(null);
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      setOcrImagePreview(dataUrl);
-      const base64Data = dataUrl.split(',')[1] || '';
-      setOcrImageBase64(base64Data);
-      setOcrImageMime(file.type || 'image/jpeg');
+    try {
+      const optimized = await optimizeImageForOcr(file, {
+        maxDimension: 1600,
+        quality: 0.85,
+      });
+      setOcrImagePreview(optimized.dataUrl);
+      setOcrImageBase64(optimized.base64);
+      setOcrImageMime(optimized.mimeType);
       setOcrState('image_selected');
-    };
-    reader.onerror = () => {
+    } catch {
       setOcrError(language === 'hi' ? 'फ़ाइल पढ़ने में त्रुटि हुई।' : 'Failed to read the selected file.');
       setOcrState('error');
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const handleExecuteOcrScan = async () => {

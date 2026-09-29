@@ -173,12 +173,12 @@ def transcribe_audio(request: AudioTranscriptionRequest) -> TranscriptionRespons
 
 @app.post("/voice/extract", response_model=VoiceExtractionResponse)
 def extract_transaction(request: ExtractionRequest) -> VoiceExtractionResponse:
-    """Extract structured transaction suggestion from speech transcript using Gemini.
+    """Extract structured transaction suggestion from speech transcript using Groq LLM.
 
     TREATS AI OUTPUT AS UNTRUSTED INPUT:
     Validates raw dictionary strictly through Pydantic. Invalid categories,
     negative amounts, or malformed fields are rejected with HTTP 422.
-    When GEMINI_API_KEY is missing and stubs are not enabled, returns HTTP 503.
+    When GROQ_API_KEY is missing and stubs are not enabled, returns HTTP 503.
 
     GUARANTEE: Does NOT write to ledger state and does NOT call the finance engine.
     """
