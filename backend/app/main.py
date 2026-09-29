@@ -1,5 +1,9 @@
 import base64
+import logging
 import os
+import time
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
@@ -34,6 +38,16 @@ from app.voice_engine import (
     get_transcription_provider,
     validate_suggested_transaction,
 )
+
+load_dotenv()
+
+# Centralized logging setup
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("arthsahayak.api")
 
 app = FastAPI(
     title="ArthSahayak API",
@@ -88,65 +102,112 @@ def calculate_finance(request: FinanceCalculationRequest) -> FinancialSummary:
 
 @app.post("/voice/transcribe", response_model=TranscriptionResponse)
 def transcribe_audio(request: AudioTranscriptionRequest) -> TranscriptionResponse:
-    """Transcribe audio data through the transcription provider abstraction.
+    """Transcribe audio data through Groq Whisper API.
 
-    Dynamically resolves provider:
-    - Real Groq Whisper provider when GROQ_API_KEY is configured.
-    - Safe stub provider when GROQ_API_KEY is absent.
+    Validates audio data, passes bytes to Groq Whisper, and logs diagnostic metrics.
+    When GROQ_API_KEY is missing and stubs are not enabled, returns HTTP 503 Service Unavailable.
     """
+    start_time = time.perf_counter()
+    logger.info("Received POST /voice/transcribe request")
+
     try:
-        audio_bytes = base64.b64decode(request.audio_base64)
+        raw_b64 = request.audio_base64.strip()
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        audio_bytes = base64.b64decode(raw_b64)
     except Exception as e:
+        logger.warning("POST /voice/transcribe base64 decode failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid base64 audio data: {e}",
         )
 
-    provider = get_transcription_provider()
+    mime_type = request.mime_type or "audio/webm"
+    logger.info("POST /voice/transcribe payload size: %d bytes, MIME: %s", len(audio_bytes), mime_type)
+
+    try:
+        provider = get_transcription_provider()
+    except VoiceConfigurationError as e:
+        logger.error("POST /voice/transcribe configuration error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+
+    provider_name = type(provider).__name__
+    logger.info("POST /voice/transcribe resolved provider: %s", provider_name)
+
     try:
         transcript = provider.transcribe(
             audio_data=audio_bytes,
-            mime_type=request.mime_type or "audio/webm",
+            mime_type=mime_type,
         )
     except AudioValidationError as e:
+        logger.warning("POST /voice/transcribe validation error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
     except VoiceConfigurationError as e:
+        logger.error("POST /voice/transcribe configuration error: %s", e)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Voice configuration error: {e}",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
         )
     except TranscriptionError as e:
+        logger.error("POST /voice/transcribe upstream error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Upstream transcription error: {e}",
         )
 
-    return TranscriptionResponse(transcript=transcript, confidence=0.95)
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        "POST /voice/transcribe completed in %.1fms, transcript length: %d chars",
+        elapsed_ms,
+        len(transcript),
+    )
 
+    return TranscriptionResponse(transcript=transcript, confidence=0.95)
 
 
 @app.post("/voice/extract", response_model=VoiceExtractionResponse)
 def extract_transaction(request: ExtractionRequest) -> VoiceExtractionResponse:
-    """Extract structured transaction suggestion from speech transcript.
+    """Extract structured transaction suggestion from speech transcript using Gemini.
 
     TREATS AI OUTPUT AS UNTRUSTED INPUT:
     Validates raw dictionary strictly through Pydantic. Invalid categories,
     negative amounts, or malformed fields are rejected with HTTP 422.
+    When GEMINI_API_KEY is missing and stubs are not enabled, returns HTTP 503.
 
     GUARANTEE: Does NOT write to ledger state and does NOT call the finance engine.
     """
-    provider = get_extraction_provider()
+    start_time = time.perf_counter()
+    logger.info("Received POST /voice/extract request, transcript length: %d chars", len(request.transcript))
+
+    try:
+        provider = get_extraction_provider()
+    except VoiceConfigurationError as e:
+        logger.error("POST /voice/extract configuration error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+
+    provider_name = type(provider).__name__
+    provider_model = getattr(provider, "model", None)
+    logger.info("POST /voice/extract resolved provider: %s (model=%s)", provider_name, provider_model)
+
     try:
         raw_suggestion = provider.extract(request.transcript)
     except VoiceConfigurationError as e:
+        logger.error("POST /voice/extract configuration error: %s", e)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Voice extraction configuration error: {e}",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
         )
     except ExtractionError as e:
+        logger.error("POST /voice/extract upstream error (provider=%s, model=%s): %s", provider_name, provider_model, e)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Upstream extraction error: {e}",
@@ -155,10 +216,20 @@ def extract_transaction(request: ExtractionRequest) -> VoiceExtractionResponse:
     try:
         validated_tx = validate_suggested_transaction(raw_suggestion)
     except ValidationError as e:
+        logger.warning("POST /voice/extract transaction validation failed: %s", e.errors())
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"AI extraction produced invalid transaction data: {e.errors()}",
         )
+
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        "POST /voice/extract completed in %.1fms: category=%s, tx_type=%s, amount=%s",
+        elapsed_ms,
+        validated_tx.category,
+        validated_tx.tx_type,
+        validated_tx.amount,
+    )
 
     return VoiceExtractionResponse(
         transcript=request.transcript,
@@ -169,7 +240,7 @@ def extract_transaction(request: ExtractionRequest) -> VoiceExtractionResponse:
 
 @app.post("/ocr/extract", response_model=OcrExtractionResponse)
 def extract_ocr_transaction(request: OcrExtractionRequest) -> OcrExtractionResponse:
-    """Extract structured transaction suggestion from photo/scanned ledger document.
+    """Extract structured transaction suggestion from photo/scanned ledger document using Gemini Vision.
 
     TREATS AI OUTPUT AS UNTRUSTED INPUT:
     - Enforces 10 MB decoded image limit and validates image MIME types.
@@ -177,37 +248,56 @@ def extract_ocr_transaction(request: OcrExtractionRequest) -> OcrExtractionRespo
     - Validates AI suggestion strictly via Pydantic Transaction model.
     - Invalid categories, negative amounts, or malformed fields return HTTP 422.
     - Upstream Gemini failures return HTTP 502 (never silently falls back to fake/stub data).
+    - When GEMINI_API_KEY is missing and stubs are not enabled, returns HTTP 503.
     - GUARANTEE: Does NOT write to ledger state and does NOT call finance engine.
     """
+    start_time = time.perf_counter()
+    logger.info("Received POST /ocr/extract request")
+
     try:
-        image_bytes = base64.b64decode(request.image_base64, validate=True)
+        raw_b64 = request.image_base64.strip()
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        image_bytes = base64.b64decode(raw_b64, validate=True)
     except Exception as e:
+        logger.warning("POST /ocr/extract base64 decode failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid base64 image data: {e}",
         )
 
     mime_type = request.mime_type or "image/jpeg"
+    logger.info("POST /ocr/extract payload size: %d bytes, MIME: %s", len(image_bytes), mime_type)
 
-    provider = get_ocr_provider()
     try:
-        raw_suggestion = provider.extract_from_image(image_bytes=image_bytes, mime_type=mime_type)
-    except ImageValidationError as e:
+        provider = get_ocr_provider()
+    except OcrConfigurationError as e:
+        logger.error("POST /ocr/extract configuration error: %s", e)
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
-    except OcrValidationError as e:
+
+    provider_name = type(provider).__name__
+    provider_model = getattr(provider, "model", None)
+    logger.info("POST /ocr/extract resolved provider: %s (model=%s)", provider_name, provider_model)
+
+    try:
+        raw_suggestion = provider.extract_from_image(image_bytes=image_bytes, mime_type=mime_type)
+    except (ImageValidationError, OcrValidationError) as e:
+        logger.warning("POST /ocr/extract validation rejection: %s", e)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
     except OcrConfigurationError as e:
+        logger.error("POST /ocr/extract configuration error: %s", e)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"OCR configuration error: {e}",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
         )
     except OcrError as e:
+        logger.error("POST /ocr/extract upstream error (provider=%s, model=%s): %s", provider_name, provider_model, e)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Upstream OCR error: {e}",
@@ -221,10 +311,18 @@ def extract_ocr_transaction(request: OcrExtractionRequest) -> OcrExtractionRespo
             for tx in raw_tx_list
         ]
     except ValidationError as e:
+        logger.warning("POST /ocr/extract transaction validation failed: %s", e.errors())
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"AI OCR extraction produced invalid transaction data: {e.errors()}",
         )
+
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        "POST /ocr/extract completed in %.1fms: extracted %d transactions",
+        elapsed_ms,
+        len(validated_transactions),
+    )
 
     return OcrExtractionResponse(
         suggested_transactions=validated_transactions,

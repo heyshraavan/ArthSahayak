@@ -14,17 +14,40 @@ Audio
 
 from datetime import date
 import json
+import logging
 import os
 import re
+import time
 from typing import Any, Literal, Optional, Protocol
 
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field, ValidationError
 
 from app.schemas import Transaction, TransactionCategory
 
+load_dotenv()
+
+logger = logging.getLogger("arthsahayak.voice")
+
 MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB application limit
 
-DEFAULT_GEMINI_MODEL: str = "gemini-3.6-flash"
+DEFAULT_GEMINI_MODEL: str = "gemini-3.5-flash"
+
+
+def resolve_gemini_model(model: Optional[str] = None) -> str:
+    """Resolve the active Gemini model name consistently across extraction and OCR.
+
+    Priority:
+    1. GEMINI_MODEL environment variable (if explicitly configured)
+    2. Explicit model argument passed to constructor (if provided)
+    3. DEFAULT_GEMINI_MODEL ('gemini-2.5-flash')
+    """
+    env_model = os.environ.get("GEMINI_MODEL", "").strip()
+    if env_model:
+        return env_model
+    if model and model.strip():
+        return model.strip()
+    return DEFAULT_GEMINI_MODEL
 
 SUPPORTED_AUDIO_MIME_TYPES = {
     "audio/webm",
@@ -137,15 +160,25 @@ class GroqWhisperTranscriptionProvider:
             "audio/flac": "recording.flac",
         }
         filename = extension_map.get(normalized_mime, "recording.webm")
+        model = os.environ.get("GROQ_WHISPER_MODEL", "whisper-large-v3")
+
+        start_time = time.perf_counter()
+        logger.info(
+            "Groq Whisper transcription starting: payload=%d bytes, mime=%s, model=%s",
+            len(audio_data),
+            mime_type,
+            model,
+        )
 
         try:
             response = self._client.audio.transcriptions.create(
                 file=(filename, audio_data),
-                model="whisper-large-v3",
+                model=model,
                 temperature=0.0,
                 response_format="json",
             )
         except Exception as err:
+            logger.error("Groq Whisper transcription failed: %s: %s", type(err).__name__, err)
             raise TranscriptionError(f"Groq Whisper transcription failed: {err}") from err
 
         # Extract transcript text
@@ -157,7 +190,15 @@ class GroqWhisperTranscriptionProvider:
             transcript = str(response)
 
         if not transcript.strip():
+            logger.warning("Groq Whisper returned an empty transcription")
             raise TranscriptionError("Groq Whisper returned an empty transcription")
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "Groq Whisper transcription succeeded in %.1fms: transcript_length=%d chars",
+            duration_ms,
+            len(transcript.strip()),
+        )
 
         return transcript.strip()
 
@@ -180,17 +221,36 @@ class StubTranscriptionProvider:
         return "Received Rs 14000 from Anil Babu for 2 desks"
 
 
-def get_transcription_provider(api_key: Optional[str] = None) -> TranscriptionProvider:
+def get_transcription_provider(
+    api_key: Optional[str] = None,
+    allow_stub: Optional[bool] = None,
+) -> TranscriptionProvider:
     """Resolve active transcription provider based on environment configuration.
 
     If GROQ_API_KEY is present and non-empty, selects GroqWhisperTranscriptionProvider.
-    If GROQ_API_KEY is absent or empty, safely falls back to StubTranscriptionProvider.
-    Application startup NEVER fails merely because GROQ_API_KEY is absent.
+    If GROQ_API_KEY is absent or empty:
+    - If allow_stub is True or ALLOW_STUB_PROVIDERS is enabled ('true', '1', 'yes'),
+      selects StubTranscriptionProvider for offline testing.
+    - Otherwise raises VoiceConfigurationError with clear instructions.
     """
     key = (api_key or os.environ.get("GROQ_API_KEY", "")).strip()
     if key:
         return GroqWhisperTranscriptionProvider(api_key=key)
-    return StubTranscriptionProvider()
+
+    is_stub_allowed = (
+        allow_stub
+        if allow_stub is not None
+        else os.environ.get("ALLOW_STUB_PROVIDERS", "").strip().lower() in ("true", "1", "yes")
+    )
+    if is_stub_allowed:
+        logger.warning(
+            "GROQ_API_KEY is absent. Using StubTranscriptionProvider because ALLOW_STUB_PROVIDERS is enabled."
+        )
+        return StubTranscriptionProvider()
+
+    raise VoiceConfigurationError(
+        "GROQ_API_KEY is not configured on the server. Speech transcription requires a valid Groq API key."
+    )
 
 
 class ExtractionProvider(Protocol):
@@ -247,7 +307,7 @@ class GeminiExtractionProvider:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = DEFAULT_GEMINI_MODEL,
+        model: Optional[str] = None,
         client: Optional[Any] = None,
     ) -> None:
         self.api_key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
@@ -255,7 +315,7 @@ class GeminiExtractionProvider:
             raise VoiceConfigurationError(
                 "GEMINI_API_KEY is not configured. Provide an API key or set GEMINI_API_KEY environment variable."
             )
-        self.model = model
+        self.model = resolve_gemini_model(model)
         if client is not None:
             self._client = client
         else:
@@ -292,6 +352,13 @@ class GeminiExtractionProvider:
             f"6. Do not extract or handle any Aadhaar, PAN, or sensitive identity documents."
         )
 
+        start_time = time.perf_counter()
+        logger.info(
+            "Gemini extraction starting: transcript_len=%d chars, model=%s",
+            len(cleaned),
+            self.model,
+        )
+
         try:
             from google.genai import types
 
@@ -302,10 +369,12 @@ class GeminiExtractionProvider:
                     response_mime_type="application/json",
                     response_schema=GeminiTransactionExtraction,
                     temperature=0.0,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 ),
             )
         except Exception as err:
-            raise ExtractionError(f"Gemini extraction failed: {err}") from err
+            logger.error("Gemini extraction failed (model=%s): %s: %s", self.model, type(err).__name__, err)
+            raise ExtractionError(f"Gemini extraction failed (model={self.model}): {err}") from err
 
         # Parse response (handle parsed object, text JSON, or dict)
         raw_dict: dict[str, Any] = {}
@@ -318,16 +387,35 @@ class GeminiExtractionProvider:
 
         if not raw_dict and hasattr(response, "text") and response.text:
             try:
-                raw_dict = json.loads(response.text)
+                text_content = response.text.strip()
+                if text_content.startswith("```"):
+                    lines = text_content.splitlines()
+                    if lines and lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].strip().startswith("```"):
+                        lines = lines[:-1]
+                    text_content = "\n".join(lines).strip()
+                raw_dict = json.loads(text_content)
             except Exception as json_err:
+                logger.error("Failed to parse Gemini JSON output: %s", json_err)
                 raise ExtractionError(f"Failed to parse Gemini JSON output: {json_err}") from json_err
 
         if not raw_dict:
+            logger.error("Gemini returned empty structured output")
             raise ExtractionError("Gemini returned empty structured output")
 
         # Fill date fallback if speaker did not provide date
         if not raw_dict.get("date"):
             raw_dict["date"] = date.today()
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "Gemini extraction succeeded in %.1fms: party=%s, amount=%s, category=%s",
+            duration_ms,
+            raw_dict.get("party_name"),
+            raw_dict.get("amount"),
+            raw_dict.get("category"),
+        )
 
         return raw_dict
 
@@ -450,17 +538,36 @@ class StubExtractionProvider:
         return default
 
 
-def get_extraction_provider(api_key: Optional[str] = None) -> ExtractionProvider:
+def get_extraction_provider(
+    api_key: Optional[str] = None,
+    allow_stub: Optional[bool] = None,
+) -> ExtractionProvider:
     """Resolve active extraction provider based on environment configuration.
 
     If GEMINI_API_KEY is present and non-empty, selects GeminiExtractionProvider.
-    If GEMINI_API_KEY is absent or empty, safely falls back to StubExtractionProvider.
-    Application startup NEVER fails merely because GEMINI_API_KEY is absent.
+    If GEMINI_API_KEY is absent or empty:
+    - If allow_stub is True or ALLOW_STUB_PROVIDERS is enabled ('true', '1', 'yes'),
+      selects StubExtractionProvider for offline testing.
+    - Otherwise raises VoiceConfigurationError with clear instructions.
     """
     key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
     if key:
         return GeminiExtractionProvider(api_key=key)
-    return StubExtractionProvider()
+
+    is_stub_allowed = (
+        allow_stub
+        if allow_stub is not None
+        else os.environ.get("ALLOW_STUB_PROVIDERS", "").strip().lower() in ("true", "1", "yes")
+    )
+    if is_stub_allowed:
+        logger.warning(
+            "GEMINI_API_KEY is absent. Using StubExtractionProvider because ALLOW_STUB_PROVIDERS is enabled."
+        )
+        return StubExtractionProvider()
+
+    raise VoiceConfigurationError(
+        "GEMINI_API_KEY is not configured on the server. Structured transaction extraction requires a valid Gemini API key."
+    )
 
 
 def validate_suggested_transaction(raw_dict: dict[str, Any]) -> Transaction:

@@ -10,14 +10,21 @@ Photo bytes -> Gemini Vision -> structured OCR suggestions list -> Pydantic vali
 
 from datetime import date
 import json
+import logging
 import os
 import re
+import time
 from typing import Any, Literal, Optional, Protocol
 
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from app.schemas import TransactionCategory
-from app.voice_engine import DEFAULT_GEMINI_MODEL, validate_suggested_transaction
+from app.voice_engine import DEFAULT_GEMINI_MODEL, resolve_gemini_model, validate_suggested_transaction
+
+load_dotenv()
+
+logger = logging.getLogger("arthsahayak.ocr")
 
 # 10 MB maximum application limit for decoded image payload
 MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
@@ -247,7 +254,7 @@ class GeminiOcrProvider:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = DEFAULT_GEMINI_MODEL,
+        model: Optional[str] = None,
         client: Optional[Any] = None,
     ) -> None:
         self.api_key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
@@ -255,7 +262,7 @@ class GeminiOcrProvider:
             raise OcrConfigurationError(
                 "GEMINI_API_KEY is not configured. Provide an API key or set GEMINI_API_KEY environment variable."
             )
-        self.model = model
+        self.model = resolve_gemini_model(model)
         if client is not None:
             self._client = client
         else:
@@ -360,12 +367,21 @@ class GeminiOcrProvider:
             f"   - Do NOT calculate turnover, working capital, interest, or any financial ratios."
         )
 
+        clean_mime = mime_type.split(";")[0].strip().lower()
+        start_time = time.perf_counter()
+        logger.info(
+            "Gemini OCR starting: payload=%d bytes, mime=%s, model=%s",
+            len(image_bytes),
+            clean_mime,
+            self.model,
+        )
+
         try:
             from google.genai import types
 
             image_part = types.Part.from_bytes(
                 data=image_bytes,
-                mime_type=mime_type.split(";")[0].strip().lower(),
+                mime_type=clean_mime,
             )
 
             response = self._client.models.generate_content(
@@ -375,10 +391,12 @@ class GeminiOcrProvider:
                     response_mime_type="application/json",
                     response_schema=GeminiOcrBatchExtraction,
                     temperature=0.0,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 ),
             )
         except Exception as err:
-            raise OcrError(f"Gemini OCR extraction failed: {err}") from err
+            logger.error("Gemini OCR extraction failed (model=%s): %s: %s", self.model, type(err).__name__, err)
+            raise OcrError(f"Gemini OCR extraction failed (model={self.model}): {err}") from err
 
         raw_dict: dict[str, Any] = {}
         if getattr(response, "parsed", None) is not None:
@@ -390,16 +408,27 @@ class GeminiOcrProvider:
 
         if not raw_dict and hasattr(response, "text") and response.text:
             try:
-                raw_dict = json.loads(response.text)
+                text_content = response.text.strip()
+                if text_content.startswith("```"):
+                    lines = text_content.splitlines()
+                    if lines and lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].strip().startswith("```"):
+                        lines = lines[:-1]
+                    text_content = "\n".join(lines).strip()
+                raw_dict = json.loads(text_content)
             except Exception as json_err:
+                logger.error("Failed to parse Gemini OCR JSON output: %s", json_err)
                 raise OcrError(f"Failed to parse Gemini OCR JSON output: {json_err}") from json_err
 
         if not raw_dict:
+            logger.error("Gemini returned empty structured OCR output")
             raise OcrError("Gemini returned empty structured OCR output")
 
         # Identity Document Rejection Guardrail
         if raw_dict.get("is_identity_document"):
             reason = raw_dict.get("rejection_reason") or "Identity document detected"
+            logger.warning("Gemini OCR rejected identity document: %s", reason)
             raise OcrValidationError(
                 f"Identity document rejected ({reason}). Personal identity documents (Aadhaar, PAN, "
                 f"caste certificates, etc.) cannot be processed as financial transactions."
@@ -430,6 +459,13 @@ class GeminiOcrProvider:
                 tx_dict["date"] = date.today()
 
             formatted_transactions.append(tx_dict)
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "Gemini OCR succeeded in %.1fms: extracted %d transactions",
+            duration_ms,
+            len(formatted_transactions),
+        )
 
         return {
             "transactions": formatted_transactions,
@@ -712,14 +748,33 @@ class StubOcrProvider:
         }
 
 
-def get_ocr_provider(api_key: Optional[str] = None) -> OcrProvider:
+def get_ocr_provider(
+    api_key: Optional[str] = None,
+    allow_stub: Optional[bool] = None,
+) -> OcrProvider:
     """Resolve active OCR provider based on environment configuration.
 
     If GEMINI_API_KEY is present and non-empty, selects GeminiOcrProvider.
-    If GEMINI_API_KEY is absent or empty, safely falls back to StubOcrProvider.
-    Application startup NEVER fails merely because GEMINI_API_KEY is absent.
+    If GEMINI_API_KEY is absent or empty:
+    - If allow_stub is True or ALLOW_STUB_PROVIDERS is enabled ('true', '1', 'yes'),
+      selects StubOcrProvider for offline testing.
+    - Otherwise raises OcrConfigurationError with clear instructions.
     """
     key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
     if key:
         return GeminiOcrProvider(api_key=key)
-    return StubOcrProvider()
+
+    is_stub_allowed = (
+        allow_stub
+        if allow_stub is not None
+        else os.environ.get("ALLOW_STUB_PROVIDERS", "").strip().lower() in ("true", "1", "yes")
+    )
+    if is_stub_allowed:
+        logger.warning(
+            "GEMINI_API_KEY is absent. Using StubOcrProvider because ALLOW_STUB_PROVIDERS is enabled."
+        )
+        return StubOcrProvider()
+
+    raise OcrConfigurationError(
+        "GEMINI_API_KEY is not configured on the server. Physical ledger OCR requires a valid Gemini API key."
+    )

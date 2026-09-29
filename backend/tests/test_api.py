@@ -476,4 +476,26 @@ def test_cors_unauthorized_origin_rejected():
     assert response.headers.get("access-control-allow-origin") != "https://unauthorized-evil-site.com"
 
 
+def test_production_mode_missing_credentials_returns_503(monkeypatch):
+    """Verify that in production mode (ALLOW_STUB_PROVIDERS=false) missing keys return 503, never fake stub results."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("ALLOW_STUB_PROVIDERS", "false")
+
+    # 1. Voice transcription
+    res_transcribe = client.post("/voice/transcribe", json={"audio_base64": "dGVzdA==", "mime_type": "audio/webm"})
+    assert res_transcribe.status_code == 503
+    assert "GROQ_API_KEY is not configured" in res_transcribe.json().get("detail", "")
+
+    # 2. Voice extraction
+    res_extract = client.post("/voice/extract", json={"transcript": "Sold 2 chairs for 1000"})
+    assert res_extract.status_code == 503
+    assert "GEMINI_API_KEY is not configured" in res_extract.json().get("detail", "")
+
+    # 3. OCR extraction
+    res_ocr = client.post("/ocr/extract", json={"image_base64": "dGVzdA==", "mime_type": "image/jpeg"})
+    assert res_ocr.status_code == 503
+    assert "GEMINI_API_KEY is not configured" in res_ocr.json().get("detail", "")
+
+
 

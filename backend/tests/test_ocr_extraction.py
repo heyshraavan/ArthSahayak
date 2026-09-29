@@ -64,13 +64,22 @@ def test_ocr_provider_selection_without_gemini_api_key(monkeypatch):
 
 
 def test_ocr_provider_selection_with_gemini_api_key(monkeypatch):
-    """When GEMINI_API_KEY is present, GeminiOcrProvider is selected with gemini-3.6-flash."""
+    """When GEMINI_API_KEY is present, GeminiOcrProvider is selected with default model."""
     monkeypatch.setenv("GEMINI_API_KEY", "mock_gemini_vision_key_123")
     provider = get_ocr_provider()
     assert isinstance(provider, GeminiOcrProvider)
     assert provider.api_key == "mock_gemini_vision_key_123"
     assert provider.model == DEFAULT_GEMINI_MODEL
-    assert provider.model == "gemini-3.6-flash"
+    assert provider.model == "gemini-3.5-flash"
+
+
+def test_ocr_model_configurable_via_env(monkeypatch):
+    """Verify GEMINI_MODEL environment variable overrides default OCR model."""
+    monkeypatch.setenv("GEMINI_API_KEY", "mock_gemini_vision_key_123")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    provider = get_ocr_provider()
+    assert isinstance(provider, GeminiOcrProvider)
+    assert provider.model == "gemini-3.5-flash-lite"
 
 
 def test_gemini_ocr_provider_missing_key_raises_configuration_error(monkeypatch):
@@ -156,10 +165,11 @@ def test_gemini_vision_ocr_single_transaction_mocked():
     # Verify generate_content parameters
     mock_genai_client.models.generate_content.assert_called_once()
     _, kwargs = mock_genai_client.models.generate_content.call_args
-    assert kwargs["model"] == "gemini-3.6-flash"
+    assert kwargs["model"] == "gemini-3.5-flash"
     assert len(kwargs["contents"]) == 2
     assert kwargs["config"].temperature == 0.0
     assert kwargs["config"].response_schema == GeminiOcrBatchExtraction
+    assert kwargs["config"].automatic_function_calling.disable is True
 
 
 def test_gemini_vision_ocr_multi_transaction_bahi_khata_rows():
@@ -756,6 +766,27 @@ def test_api_endpoint_ocr_upstream_gemini_failure_returns_502(monkeypatch):
     assert "Upstream OCR error" in resp.json()["detail"]
 
 
+def test_api_endpoint_gemini_ocr_503_unavailable_returns_502(monkeypatch):
+    """When Gemini Vision returns 503 UNAVAILABLE, endpoint cleanly returns 502 with model name in detail."""
+    monkeypatch.setenv("GEMINI_API_KEY", "mock_key")
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.generate_content.side_effect = Exception(
+        "503 UNAVAILABLE: This model is currently experiencing high demand."
+    )
+    mock_provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client)
+
+    fake_b64 = base64.b64encode(b"valid_image").decode("utf-8")
+    with patch("app.main.get_ocr_provider", return_value=mock_provider):
+        resp = client.post("/ocr/extract", json={"image_base64": fake_b64, "mime_type": "image/jpeg"})
+
+    assert resp.status_code == 502
+    detail = resp.json()["detail"]
+    assert "Upstream OCR error" in detail
+    assert "gemini-3.5-flash" in detail
+    assert "503 UNAVAILABLE" in detail
+
+
 def test_api_endpoint_untrusted_ai_invalid_category_inside_list_returns_422(monkeypatch):
     """If Gemini returns an invalid category in any transaction in the list, Pydantic rejects with HTTP 422."""
     monkeypatch.setenv("GEMINI_API_KEY", "mock_key")
@@ -1065,4 +1096,111 @@ def test_ocr_extract_endpoint_normalizes_dd_slash_yyyy_date():
     assert len(data["suggested_transactions"]) == 1
     assert data["suggested_transactions"][0]["date"] == "2007-05-22"
     assert data["suggested_transactions"][0]["amount"] == 146.0
+
+
+def test_ocr_provider_selection_missing_key_disallowing_stubs(monkeypatch):
+    """When GEMINI_API_KEY is absent and stubs are disallowed, OcrConfigurationError is raised."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("ALLOW_STUB_PROVIDERS", "false")
+    with pytest.raises(OcrConfigurationError) as exc_info:
+        get_ocr_provider()
+    assert "GEMINI_API_KEY is not configured" in str(exc_info.value)
+
+
+def test_ocr_extract_endpoint_missing_credentials_returns_503(monkeypatch):
+    """When GEMINI_API_KEY is missing in production mode, endpoint returns HTTP 503 Service Unavailable."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("ALLOW_STUB_PROVIDERS", "false")
+    b64_img = base64.b64encode(b"fake_jpeg_image_bytes").decode("utf-8")
+    response = client.post(
+        "/ocr/extract",
+        json={"image_base64": b64_img, "mime_type": "image/jpeg"},
+    )
+    assert response.status_code == 503
+    assert "GEMINI_API_KEY is not configured" in response.json().get("detail", "")
+
+
+def test_ocr_extract_endpoint_accepts_data_url_prefix():
+    """Verify POST /ocr/extract accepts base64 with data URL prefix (e.g. from FileReader)."""
+    raw_b64 = base64.b64encode(b"test:customer_sales").decode("utf-8")
+    data_url = f"data:image/jpeg;base64,{raw_b64}"
+    response = client.post(
+        "/ocr/extract",
+        json={"image_base64": data_url, "mime_type": "image/jpeg"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["suggested_transactions"]) == 1
+    assert data["suggested_transactions"][0]["party_name"] == "Ramesh Kumar (Customer)"
+    assert data["suggested_transactions"][0]["amount"] == 1200.0
+
+
+def test_gemini_ocr_disables_afc_in_config():
+    """Verify Gemini OCR explicitly sets automatic_function_calling.disable=True.
+
+    Prevents deprecated AFC warning and unnecessary AFC remote loops in single-turn OCR extraction.
+    """
+    mock_genai_client = MagicMock()
+    mock_response = MagicMock()
+    mock_batch = GeminiOcrBatchExtraction(
+        is_identity_document=False,
+        rejection_reason=None,
+        transactions=[
+            GeminiOcrTransactionItem(
+                date="2026-09-12",
+                party_name="Gupta Hardware",
+                item="Iron Rods",
+                amount=8500.0,
+                tx_type="debit",
+                category="raw_material",
+            )
+        ],
+        raw_text="Iron Rods ₹8500",
+    )
+    mock_response.parsed = mock_batch
+    mock_response.text = json.dumps(mock_batch.model_dump())
+    mock_genai_client.models.generate_content.return_value = mock_response
+
+    provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client)
+    provider.extract_from_image(b"fake_image_bytes", mime_type="image/jpeg")
+
+    _, kwargs = mock_genai_client.models.generate_content.call_args
+    config = kwargs["config"]
+    assert config.automatic_function_calling is not None
+    assert config.automatic_function_calling.disable is True
+
+
+def test_gemini_ocr_strips_markdown_code_fences_from_json_fallback():
+    """Verify that if response.parsed is None and response.text is wrapped in markdown code fences, OCR parses successfully."""
+    mock_genai_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.parsed = None
+    mock_response.text = (
+        "```json\n"
+        "{\n"
+        '  "is_identity_document": false,\n'
+        '  "rejection_reason": null,\n'
+        '  "transactions": [\n'
+        "    {\n"
+        '      "date": "2026-09-12",\n'
+        '      "party_name": "Laxmi General Store",\n'
+        '      "item": "Flour and Sugar",\n'
+        '      "amount": 2400.0,\n'
+        '      "tx_type": "debit",\n'
+        '      "category": "raw_material"\n'
+        "    }\n"
+        "  ],\n"
+        '  "raw_text": "Laxmi General Store Flour and Sugar 2400"\n'
+        "}\n"
+        "```"
+    )
+    mock_genai_client.models.generate_content.return_value = mock_response
+
+    provider = GeminiOcrProvider(api_key="mock_key", client=mock_genai_client)
+    result = provider.extract_from_image(b"fake_image_bytes", mime_type="image/jpeg")
+
+    assert result["transactions"][0]["party_name"] == "Laxmi General Store"
+    assert result["transactions"][0]["amount"] == 2400.0
+    assert result["transactions"][0]["category"] == "raw_material"
+
 

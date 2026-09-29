@@ -200,3 +200,25 @@ def test_transcribe_endpoint_does_not_mutate_ledger():
     assert "turnover" not in data
     assert "working_capital_requirement" not in data
     assert "dscr" not in data
+
+
+def test_provider_selection_missing_key_disallowing_stubs(monkeypatch):
+    """When GROQ_API_KEY is absent and stubs are disallowed, VoiceConfigurationError is raised."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("ALLOW_STUB_PROVIDERS", "false")
+    with pytest.raises(VoiceConfigurationError) as exc_info:
+        get_transcription_provider()
+    assert "GROQ_API_KEY is not configured" in str(exc_info.value)
+
+
+def test_transcribe_endpoint_missing_credentials_returns_503(monkeypatch):
+    """When GROQ_API_KEY is missing in production mode, endpoint returns HTTP 503 Service Unavailable."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("ALLOW_STUB_PROVIDERS", "false")
+    b64_audio = base64.b64encode(b"real_audio_payload_bytes").decode("utf-8")
+    response = client.post(
+        "/voice/transcribe",
+        json={"audio_base64": b64_audio, "mime_type": "audio/webm"},
+    )
+    assert response.status_code == 503
+    assert "GROQ_API_KEY is not configured" in response.json().get("detail", "")
