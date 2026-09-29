@@ -7,6 +7,7 @@ interface LedgerPageProps {
   transactions: Transaction[];
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void> | void;
   onAddTransactions?: (txs: Omit<Transaction, 'id'>[]) => Promise<void> | void;
+  onUpdateTransaction?: (tx: Transaction) => Promise<void> | void;
   onDeleteTransaction?: (id: string) => Promise<void> | void;
   language: 'en' | 'hi';
   activeReviewItem?: QueuedMediaItem | null;
@@ -19,6 +20,7 @@ export const LedgerPage: React.FC<LedgerPageProps> = ({
   transactions,
   onAddTransaction,
   onAddTransactions,
+  onUpdateTransaction,
   onDeleteTransaction,
   language,
   activeReviewItem,
@@ -28,11 +30,11 @@ export const LedgerPage: React.FC<LedgerPageProps> = ({
 }) => {
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-        <h1 className="text-base font-bold text-slate-900">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs transition-colors">
+        <h1 className="text-base font-bold text-slate-900 dark:text-slate-100">
           {language === 'hi' ? 'डिजिटल बही-खाता (Ledger)' : 'Digital Bahi-Khata (Ledger)'}
         </h1>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
           {language === 'hi'
             ? 'आपकी सभी लेन-देन प्रविष्टियाँ (आवक और खर्च) यहाँ सुरक्षित हैं।'
             : 'All recorded informal cash receipts and operational expenses in one place.'}
@@ -46,6 +48,7 @@ export const LedgerPage: React.FC<LedgerPageProps> = ({
           <RecentTransactions
             transactions={transactions}
             language={language}
+            onUpdateTransaction={onUpdateTransaction}
             onDeleteTransaction={onDeleteTransaction}
           />
         </div>

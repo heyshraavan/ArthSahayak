@@ -23,6 +23,7 @@ const STATIC_SHELL_ASSETS = [
   '/logo.png',
   '/favicon.svg',
   '/icons.svg',
+  '/hero-bg.jpg',
 ];
 
 self.addEventListener('install', (event) => {

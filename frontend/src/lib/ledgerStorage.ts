@@ -141,6 +141,31 @@ export async function addTransaction(transaction: Transaction): Promise<void> {
 }
 
 /**
+ * Update an existing confirmed transaction in IndexedDB.
+ * Modifies fields by ID using atomic put operation.
+ */
+export async function updateTransaction(transaction: Transaction): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    store.put(transaction);
+
+    tx.oncomplete = () => {
+      resolve();
+    };
+
+    tx.onerror = () => {
+      reject(tx.error || new Error(`Failed to update transaction ${transaction.id} in IndexedDB.`));
+    };
+
+    tx.onabort = () => {
+      reject(tx.error || new Error(`Update operation for transaction ${transaction.id} was aborted.`));
+    };
+  });
+}
+
+/**
  * Atomically add a batch of confirmed transactions to IndexedDB.
  * Uses a single readwrite transaction so the entire batch succeeds or fails as a unit.
  */

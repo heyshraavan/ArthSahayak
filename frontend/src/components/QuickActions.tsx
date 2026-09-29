@@ -489,7 +489,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
-  };
+  }
 
   const handleProcessAudio = async (audioBlob: Blob) => {
     // Phase B: If offline before sending, queue audio blob immediately
@@ -662,7 +662,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
   return (
     <section className="space-y-2" aria-labelledby="quick-actions-heading">
-      <h2 id="quick-actions-heading" className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+      <h2 id="quick-actions-heading" className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
         {language === 'hi' ? 'त्वरित लेनदेन प्रविष्टि' : 'Quick Transaction Entry'}
       </h2>
 
@@ -672,16 +672,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         <button
           type="button"
           onClick={handleStartVoiceModal}
-          className="min-h-[72px] sm:min-h-[76px] flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl border border-blue-200 bg-blue-900 text-white shadow-xs hover:bg-blue-800 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
+          className="min-h-[72px] sm:min-h-[76px] flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl border border-indigo-500/40 dark:border-indigo-500/30 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white shadow-xs active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           aria-label={language === 'hi' ? 'बोलकर लेनदेन जोड़ें' : 'Speak Transaction'}
         >
-          <div className="p-1 sm:p-1.5 rounded-full bg-blue-800 text-blue-100">
+          <div className="p-1 sm:p-1.5 rounded-full bg-indigo-700 dark:bg-indigo-700/80 text-indigo-100">
             <Mic className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
           </div>
           <span className="text-[11px] sm:text-xs font-bold mt-1 tracking-tight text-center leading-tight">
             {language === 'hi' ? 'बोलकर जोड़ें' : 'Speak'}
           </span>
-          <span className="text-[9px] sm:text-[10px] text-blue-200 leading-tight mt-0.5">
+          <span className="text-[9px] sm:text-[10px] text-indigo-200 dark:text-indigo-200 leading-tight mt-0.5">
             {language === 'hi' ? 'आवाज से' : 'Voice Input'}
           </span>
         </button>
@@ -690,16 +690,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         <button
           type="button"
           onClick={handleStartScanModal}
-          className="min-h-[72px] sm:min-h-[76px] flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl border border-emerald-300 bg-emerald-700 text-white shadow-xs hover:bg-emerald-800 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600"
+          className="min-h-[72px] sm:min-h-[76px] flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white shadow-xs active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
           aria-label={language === 'hi' ? 'बही-खाता या पर्ची स्कैन करें' : 'Scan Chit or Ledger'}
         >
-          <div className="p-1 sm:p-1.5 rounded-full bg-emerald-800 text-emerald-100">
+          <div className="p-1 sm:p-1.5 rounded-full bg-emerald-800 dark:bg-emerald-700/80 text-emerald-100">
             <Camera className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
           </div>
           <span className="text-[11px] sm:text-xs font-bold mt-1 tracking-tight text-center leading-tight">
             {language === 'hi' ? 'पर्ची स्कैन' : 'Scan Chit'}
           </span>
-          <span className="text-[9px] sm:text-[10px] text-emerald-100 leading-tight mt-0.5">
+          <span className="text-[9px] sm:text-[10px] text-emerald-100 dark:text-emerald-200 leading-tight mt-0.5">
             {language === 'hi' ? 'फोटो खींचें' : 'Camera OCR'}
           </span>
         </button>
@@ -712,16 +712,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             setStep('input');
             setActiveModal('manual');
           }}
-          className="min-h-[72px] sm:min-h-[76px] flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 shadow-xs hover:bg-slate-50 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-600"
+          className="min-h-[72px] sm:min-h-[76px] flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 active:scale-[0.98] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           aria-label={language === 'hi' ? 'हाथ से लेनदेन लिखें' : 'Add Manual Transaction'}
         >
-          <div className="p-1 sm:p-1.5 rounded-full bg-slate-100 text-slate-700">
+          <div className="p-1 sm:p-1.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
             <Plus className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
           </div>
           <span className="text-[11px] sm:text-xs font-bold mt-1 tracking-tight text-center leading-tight">
             {language === 'hi' ? 'लिखकर जोड़ें' : 'Add Manual'}
           </span>
-          <span className="text-[9px] sm:text-[10px] text-slate-500 leading-tight mt-0.5">
+          <span className="text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
             {language === 'hi' ? 'फॉर्म भरें' : 'Form Entry'}
           </span>
         </button>
@@ -732,17 +732,17 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/70 backdrop-blur-xs p-3 overflow-y-auto"
         >
-          <div className={`bg-white rounded-2xl w-full ${activeModal === 'scan' && ocrState === 'extracted' ? 'max-w-lg' : 'max-w-md'} p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 my-auto`}>
+          <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-2xl w-full ${activeModal === 'scan' && ocrState === 'extracted' ? 'max-w-lg' : 'max-w-md'} p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 my-auto`}>
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 {((activeModal === 'manual' && step === 'review') || (activeModal === 'voice' && step === 'review')) && (
                   <button
                     type="button"
                     onClick={() => setStep('input')}
-                    className="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 cursor-pointer"
+                    className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                     aria-label="Back to edit form"
                   >
                     <ChevronLeft className="w-5 h-5" />
@@ -759,13 +759,13 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                       setOcrError(null);
                       setOcrTransactions([]);
                     }}
-                    className="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 cursor-pointer"
+                    className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                     aria-label="Back to camera picker"
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                 )}
-                <h3 className="text-base font-bold text-slate-900">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                   {activeModal === 'voice' && step === 'input' && voiceState === 'queued_offline' && (
                     language === 'hi' ? 'ऑफ़लाइन सहेजा गया' : 'Saved Offline'
                   )}
@@ -809,7 +809,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                   <button
                     type="button"
                     onClick={handleDiscardReviewItem}
-                    className="px-2 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    className="px-2 py-1 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                     title={language === 'hi' ? 'यह ऑफ़लाइन सुझाव हटाएं' : 'Discard offline suggestion'}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -819,7 +819,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 <button
                   type="button"
                   onClick={resetManualForm}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+                  className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center transition-colors"
                   aria-label="Close dialog"
                 >
                   <X className="w-5 h-5" />
@@ -836,16 +836,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     <button
                       type="button"
                       onClick={startAudioRecording}
-                      className="w-20 h-20 rounded-full bg-blue-900 hover:bg-blue-800 text-white flex flex-col items-center justify-center mx-auto shadow-lg active:scale-95 transition-transform cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-300"
+                      className="w-20 h-20 rounded-full bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white flex flex-col items-center justify-center mx-auto shadow-lg active:scale-95 transition-transform cursor-pointer focus:outline-none focus:ring-4 focus:ring-indigo-300 dark:focus:ring-indigo-900"
                       aria-label="Start recording audio"
                     >
-                      <Mic className="w-8 h-8 text-blue-100" />
+                      <Mic className="w-8 h-8 text-indigo-100" />
                     </button>
                     <div>
-                      <p className="text-sm font-bold text-slate-900">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {language === 'hi' ? 'बोलने के लिए माइक दबाएं' : 'Tap to Start Speaking'}
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         {language === 'hi'
                           ? 'अपनी भाषा में ग्राहक, सामान, राशि और विवरण बोलें'
                           : 'Speak naturally: customer, goods, amount, and payment'}
@@ -853,31 +853,31 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     </div>
 
                     {/* Quick Sample Chips for Testing & Verification */}
-                    <div className="pt-2 border-t border-slate-100 text-left space-y-2">
-                      <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-left space-y-2">
+                      <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
                         {language === 'hi' ? 'या तुरंत परीक्षण के लिए उदाहरण चुनें:' : 'Or tap a sample to test extraction:'}
                       </p>
                       <div className="space-y-1.5">
                         <button
                           type="button"
                           onClick={() => handleProcessSampleTranscript('Received Rs 14000 from Anil Babu for 2 desks')}
-                          className="w-full text-left p-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-xs text-slate-800 transition-colors cursor-pointer"
+                          className="w-full text-left p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:border-indigo-300 dark:hover:border-indigo-700 text-xs text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
                         >
-                          <span className="font-semibold text-blue-900">[Sales]</span> "Received Rs 14000 from Anil Babu for 2 desks"
+                          <span className="font-semibold text-indigo-600 dark:text-indigo-400">[Sales]</span> "Received Rs 14000 from Anil Babu for 2 desks"
                         </button>
                         <button
                           type="button"
                           onClick={() => handleProcessSampleTranscript('Paid Rs 7500 to Maa Tara Timber Depot for timber planks')}
-                          className="w-full text-left p-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-xs text-slate-800 transition-colors cursor-pointer"
+                          className="w-full text-left p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:border-amber-300 dark:hover:border-amber-700 text-xs text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
                         >
-                          <span className="font-semibold text-amber-900">[Raw Material]</span> "Paid Rs 7500 to Maa Tara Timber Depot for timber planks"
+                          <span className="font-semibold text-amber-600 dark:text-amber-400">[Raw Material]</span> "Paid Rs 7500 to Maa Tara Timber Depot for timber planks"
                         </button>
                         <button
                           type="button"
                           onClick={() => handleProcessSampleTranscript('Paid Rs 5000 to Biren Da for weekly wages')}
-                          className="w-full text-left p-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-orange-50 hover:border-orange-300 text-xs text-slate-800 transition-colors cursor-pointer"
+                          className="w-full text-left p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-orange-50 dark:hover:bg-orange-950/40 hover:border-orange-300 dark:hover:border-orange-700 text-xs text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
                         >
-                          <span className="font-semibold text-orange-900">[OpEx]</span> "Paid Rs 5000 to Biren Da for weekly wages"
+                          <span className="font-semibold text-orange-600 dark:text-orange-400">[OpEx]</span> "Paid Rs 5000 to Biren Da for weekly wages"
                         </button>
                       </div>
                     </div>
@@ -887,16 +887,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {/* State 2: Recording Audio */}
                 {voiceState === 'recording' && (
                   <div className="space-y-4 text-center py-4">
-                    <div className="relative w-20 h-20 rounded-full bg-rose-100 flex items-center justify-center mx-auto">
+                    <div className="relative w-20 h-20 rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center mx-auto">
                       <span className="absolute w-full h-full rounded-full bg-rose-400 opacity-75 animate-ping" />
-                      <Mic className="w-9 h-9 text-rose-600 relative z-10" />
+                      <Mic className="w-9 h-9 text-rose-600 dark:text-rose-400 relative z-10" />
                     </div>
                     <div className="space-y-1">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold">
                         <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
                         {language === 'hi' ? 'रिकॉर्डिंग चालू है...' : 'Recording in progress...'} ({formatSeconds(recordingSeconds)})
                       </div>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         {language === 'hi' ? 'बोलने के बाद लाल बटन दबाएं' : 'Click stop when finished speaking'}
                       </p>
                     </div>
@@ -915,12 +915,12 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {/* State 3: Processing (Transcription & Extraction) */}
                 {voiceState === 'processing' && (
                   <div className="space-y-3 text-center py-8">
-                    <div className="w-12 h-12 border-3 border-blue-900 border-t-transparent rounded-full animate-spin mx-auto" />
+                    <div className="w-12 h-12 border-3 border-indigo-600 dark:border-indigo-400 border-t-transparent rounded-full animate-spin mx-auto" />
                     <div className="space-y-1">
-                      <p className="text-sm font-bold text-slate-900">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {language === 'hi' ? 'ऑडियो का विश्लेषण हो रहा है...' : 'Processing Speech Audio...'}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         {language === 'hi'
                           ? 'आवाज को पाठ में बदलकर वित्तीय विवरण निकाला जा रहा है'
                           : 'Transcribing speech & extracting transaction candidate'}
@@ -932,8 +932,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {/* State 4: Error State */}
                 {voiceState === 'error' && (
                   <div className="space-y-4 py-2">
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-xs text-rose-800">
-                      <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl flex items-start gap-2 text-xs text-rose-800 dark:text-rose-200">
+                      <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                       <div>
                         <p className="font-bold">{language === 'hi' ? 'आवाज प्रविष्टि त्रुटि' : 'Voice Extraction Error'}</p>
                         <p className="mt-0.5">{voiceError || 'Failed to process voice input.'}</p>
@@ -944,7 +944,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                       <button
                         type="button"
                         onClick={() => setVoiceState('idle')}
-                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                       >
                         <RotateCcw className="w-4 h-4" />
                         {language === 'hi' ? 'पुनः प्रयास करें' : 'Try Again'}
@@ -955,7 +955,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                           setActiveModal('manual');
                           setStep('input');
                         }}
-                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-blue-900 text-white font-bold text-xs hover:bg-blue-800 transition-colors cursor-pointer"
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? 'हाथ से लिखें' : 'Use Manual Form'}
                       </button>
@@ -966,19 +966,19 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {/* State 5: Queued Offline */}
                 {voiceState === 'queued_offline' && (
                   <div className="space-y-4 py-3 text-center">
-                    <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto shadow-inner">
-                      <CloudOff className="w-8 h-8 text-amber-700" />
+                    <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 flex items-center justify-center mx-auto shadow-inner">
+                      <CloudOff className="w-8 h-8 text-amber-700 dark:text-amber-400" />
                     </div>
                     <div className="space-y-1.5">
-                      <h4 className="text-sm font-bold text-slate-900">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {language === 'hi' ? 'ऑफ़लाइन सहेजा गया' : 'Saved Offline'}
                       </h4>
-                      <p className="text-xs text-amber-900 font-semibold bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                      <p className="text-xs text-amber-900 dark:text-amber-200 font-semibold bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-2.5">
                         {language === 'hi'
                           ? 'ऑफ़लाइन सहेजा गया। आपके वापस ऑनलाइन होने पर यह प्रोसेस होगा।'
                           : "Saved offline. Will process when you're back online."}
                       </p>
-                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                         {language === 'hi'
                           ? 'सुरक्षा नियम: ऑनलाइन होने पर AI सुझाव पहले समीक्षा के लिए दिखाए जाएंगे। बिना पुष्टि के कोई प्रविष्टि बही-खाता में नहीं जुड़ेगी।'
                           : 'Safety invariant: AI suggestions will be surfaced for review when connectivity returns. Nothing is added to the ledger without your explicit confirmation.'}
@@ -989,7 +989,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                       <button
                         type="button"
                         onClick={resetManualForm}
-                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-blue-900 text-white font-bold text-xs shadow-md hover:bg-blue-800 transition-colors cursor-pointer"
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? 'ठीक है (Done)' : 'Done'}
                       </button>
@@ -1000,7 +1000,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                           setActiveModal('manual');
                           setStep('input');
                         }}
-                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? 'हाथ से लिखें' : 'Enter Manually'}
                       </button>
@@ -1015,17 +1015,17 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
               <form onSubmit={handleProceedToReview} className="space-y-3">
                 {/* Prominent Banner when Voice Extracted */}
                 {activeModal === 'voice' && voiceState === 'extracted' && (
-                  <div className="p-3 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1.5 animate-in fade-in duration-200">
-                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                      <Sparkles className="w-4 h-4 text-amber-700 shrink-0" />
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/80 rounded-xl space-y-1.5 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-bold text-xs">
+                      <Sparkles className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
                       <span>{language === 'hi' ? 'AI द्वारा निकाला गया — कृपया जांचें' : 'AI-extracted — Please verify'}</span>
                     </div>
                     {transcriptText && (
-                      <p className="text-[11px] text-amber-800 italic bg-white/70 p-1.5 rounded border border-amber-200">
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300 italic bg-white/80 dark:bg-slate-800/80 p-1.5 rounded border border-amber-200 dark:border-amber-800">
                         "{transcriptText}"
                       </p>
                     )}
-                    <p className="text-[10px] text-amber-700">
+                    <p className="text-[10px] text-amber-700 dark:text-amber-300/80">
                       {language === 'hi'
                         ? 'सभी फ़ील्ड और सुझाई गई श्रेणी संपादन योग्य हैं। कृपया पुष्टि करने से पहले विवरण जांच लें।'
                         : 'All fields & category are suggestions. You can edit any field before confirming.'}
@@ -1034,14 +1034,14 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 )}
 
                 {formError && (
-                  <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
+                  <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-semibold">
                     {formError}
                   </div>
                 )}
 
                 {/* 1. Transaction Type (Credit vs Debit) */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     {language === 'hi' ? '1. लेनदेन का प्रकार (Type)' : '1. Transaction Type'}
                   </label>
                   <div className="grid grid-cols-2 gap-2">
@@ -1050,33 +1050,33 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                       onClick={() => setTxType('credit')}
                       className={`min-h-[44px] flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                         txType === 'credit'
-                          ? 'bg-emerald-50 border-emerald-600 text-emerald-800 ring-2 ring-emerald-600'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-600 text-emerald-800 dark:text-emerald-300 ring-2 ring-emerald-600'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-750'
                       }`}
                     >
-                      <ArrowUpRight className="w-4 h-4 text-emerald-600" />
-                      {language === 'hi' ? 'आवक (Credit / जमा)' : 'Credit (Inflow)'}
+                      <ArrowUpRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      {language === 'hi' ? 'पैसा आया (Credit)' : 'Money In (Credit)'}
                     </button>
                     <button
                       type="button"
                       onClick={() => setTxType('debit')}
                       className={`min-h-[44px] flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                         txType === 'debit'
-                          ? 'bg-rose-50 border-rose-600 text-rose-800 ring-2 ring-rose-600'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-600 text-rose-800 dark:text-rose-300 ring-2 ring-rose-600'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-750'
                       }`}
                     >
-                      <ArrowDownRight className="w-4 h-4 text-rose-600" />
-                      {language === 'hi' ? 'खर्च (Debit / निकासी)' : 'Debit (Outflow)'}
+                      <ArrowDownRight className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                      {language === 'hi' ? 'पैसा गया (Debit)' : 'Money Out (Debit)'}
                     </button>
                   </div>
                 </div>
 
                 {/* 2. Transaction Category (Explicit User Selection / Editable AI Suggestion) */}
                 <div>
-                  <label htmlFor="tx-category" className="block text-xs font-bold text-slate-700 mb-1">
+                  <label htmlFor="tx-category" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     {activeModal === 'voice' && voiceState === 'extracted' ? (
-                      <span className="flex items-center gap-1 text-amber-900">
+                      <span className="flex items-center gap-1 text-amber-900 dark:text-amber-300">
                         <Tag className="w-3.5 h-3.5" />
                         {language === 'hi' ? '2. सुझाई गई श्रेणी (सत्यापित करें या बदलें)' : '2. Suggested Category (Verify or Change)'}
                       </span>
@@ -1088,7 +1088,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     id="tx-category"
                     value={category}
                     onChange={(e) => setCategory(e.target.value as TransactionCategory)}
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
                     {TRANSACTION_CATEGORIES.map((cat) => (
                       <option key={cat.value} value={cat.value}>
@@ -1097,7 +1097,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     ))}
                   </select>
                   {selectedCategoryInfo?.helperEn && (
-                    <p className="text-[11px] text-slate-500 mt-1">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                       {language === 'hi' ? selectedCategoryInfo.helperHi : selectedCategoryInfo.helperEn}
                     </p>
                   )}
@@ -1105,7 +1105,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
                 {/* 3. Amount */}
                 <div>
-                  <label htmlFor="tx-amount" className="block text-xs font-bold text-slate-700 mb-1">
+                  <label htmlFor="tx-amount" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     {language === 'hi' ? '3. राशि (Amount in ₹)' : '3. Amount (INR)'}
                   </label>
                   <input
@@ -1117,13 +1117,13 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder="₹ 5000"
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-bold bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
                 {/* 4. Date */}
                 <div>
-                  <label htmlFor="tx-date" className="block text-xs font-bold text-slate-700 mb-1">
+                  <label htmlFor="tx-date" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     {language === 'hi' ? '4. तारीख (Date)' : '4. Date'}
                   </label>
                   <input
@@ -1132,13 +1132,13 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     required
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
                 {/* 5. Party Name */}
                 <div>
-                  <label htmlFor="party-name" className="block text-xs font-bold text-slate-700 mb-1">
+                  <label htmlFor="party-name" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     {language === 'hi' ? '5. ग्राहक / पार्टी का नाम' : '5. Customer / Party Name'}
                   </label>
                   <input
@@ -1148,13 +1148,13 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     value={partyName}
                     onChange={(e) => setPartyName(e.target.value)}
                     placeholder={language === 'hi' ? 'उदा. सुकुमार बाबु' : 'e.g. Sukumar Roy'}
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
                 {/* 6. Item / Description */}
                 <div>
-                  <label htmlFor="item-desc" className="block text-xs font-bold text-slate-700 mb-1">
+                  <label htmlFor="item-desc" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     {language === 'hi' ? '6. सामान या काम का विवरण' : '6. Item / Work Description'}
                   </label>
                   <input
@@ -1164,7 +1164,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     value={item}
                     onChange={(e) => setItem(e.target.value)}
                     placeholder={language === 'hi' ? 'उदा. लकड़ी की मेज' : 'e.g. Wooden Dining Table'}
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
@@ -1173,7 +1173,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     <button
                       type="button"
                       onClick={() => setVoiceState('idle')}
-                      className="min-h-[48px] py-3 px-4 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      className="min-h-[48px] py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <RotateCcw className="w-4 h-4" />
                       {language === 'hi' ? 'पुनः बोलें' : 'Re-speak'}
@@ -1181,7 +1181,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                   )}
                   <button
                     type="submit"
-                    className="flex-1 min-h-[48px] py-3 px-4 rounded-xl bg-blue-900 text-white font-bold text-sm shadow-md hover:bg-blue-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
+                    className="flex-1 min-h-[48px] py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                   >
                     {language === 'hi' ? 'समीक्षा और पुष्टि करें →' : 'Review & Confirm →'}
                   </button>
@@ -1192,18 +1192,20 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             {/* Modal Body: Step 2 - Review & Confirm Step (Unified for Manual & Voice) */}
             {((activeModal === 'manual' || activeModal === 'voice') && step === 'review') && (
               <div className="space-y-4">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
                   {/* Type and Amount Header Banner */}
                   <div
-                    className={`flex items-center justify-between p-3 rounded-lg ${
-                      isCredit ? 'bg-emerald-100/90 text-emerald-900' : 'bg-rose-100/90 text-rose-900'
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      isCredit
+                        ? 'bg-emerald-100/90 dark:bg-emerald-950/80 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100'
+                        : 'bg-rose-100/90 dark:bg-rose-950/80 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-100'
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       {isCredit ? (
-                        <ArrowUpRight className="w-5 h-5 text-emerald-700" />
+                        <ArrowUpRight className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
                       ) : (
-                        <ArrowDownRight className="w-5 h-5 text-rose-700" />
+                        <ArrowDownRight className="w-5 h-5 text-rose-700 dark:text-rose-400" />
                       )}
                       <div>
                         <span className="text-[10px] font-bold uppercase tracking-wider block">
@@ -1227,14 +1229,14 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
                   {/* 6 Fields Detailed Breakdown */}
                   <div className="grid grid-cols-1 gap-2 pt-1 text-xs">
-                    <div className="flex items-center justify-between py-1.5 border-b border-slate-200">
-                      <span className="text-slate-500 font-medium flex items-center gap-1">
+                    <div className="flex items-center justify-between py-1.5 border-b border-slate-200 dark:border-slate-700">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
                         <Tag className="w-3.5 h-3.5" />
                         {language === 'hi' ? 'श्रेणी (Category)' : 'Category'}
                       </span>
                       <span
                         className={`font-semibold px-2 py-0.5 rounded-full border text-[11px] ${
-                          selectedCategoryInfo?.badgeClass ?? 'bg-slate-100 text-slate-800'
+                          selectedCategoryInfo?.badgeClass ?? 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
                         }`}
                       >
                         {selectedCategoryInfo
@@ -1245,35 +1247,35 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between py-1.5 border-b border-slate-200">
-                      <span className="text-slate-500 font-medium flex items-center gap-1">
+                    <div className="flex items-center justify-between py-1.5 border-b border-slate-200 dark:border-slate-700">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5" />
                         {language === 'hi' ? 'तारीख (Date)' : 'Date'}
                       </span>
-                      <span className="font-semibold text-slate-900">{date}</span>
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">{date}</span>
                     </div>
 
-                    <div className="flex items-center justify-between py-1.5 border-b border-slate-200">
-                      <span className="text-slate-500 font-medium flex items-center gap-1">
+                    <div className="flex items-center justify-between py-1.5 border-b border-slate-200 dark:border-slate-700">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
                         <User className="w-3.5 h-3.5" />
                         {language === 'hi' ? 'ग्राहक / पार्टी' : 'Party / Customer'}
                       </span>
-                      <span className="font-semibold text-slate-900">{partyName}</span>
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">{partyName}</span>
                     </div>
 
                     <div className="flex items-center justify-between py-1.5">
-                      <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
                         <Utensils className="w-3.5 h-3.5" />
                         {language === 'hi' ? 'सामान / कार्य' : 'Item / Description'}
                       </span>
-                      <span className="font-semibold text-slate-900">{item}</span>
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">{item}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Accounting Assurance Note */}
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
                   <p>
                     {language === 'hi'
                       ? 'पुष्टि करने पर यह लेनदेन सीधे अर्थसहायक के वित्तीय इंजन में दर्ज होगा और टर्नओवर व बैंक साख का तुरंत पुनर्गणन होगा।'
@@ -1287,8 +1289,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     type="button"
                     disabled={isSaving}
                     onClick={() => setStep('input')}
-                    className={`min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs transition-colors ${
-                      isSaving ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer'
+                    className={`min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors ${
+                      isSaving ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-750 cursor-pointer'
                     }`}
                   >
                     {language === 'hi' ? '← विवरण सुधारें' : '← Edit Details'}
@@ -1297,8 +1299,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     type="button"
                     disabled={isSaving}
                     onClick={handleConfirmAndAdd}
-                    className={`min-h-[46px] py-2.5 px-3 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600 ${
-                      isSaving ? 'opacity-60 cursor-not-allowed bg-emerald-800' : 'hover:bg-emerald-800 cursor-pointer'
+                    className={`min-h-[46px] py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600 ${
+                      isSaving ? 'opacity-60 cursor-not-allowed bg-emerald-800' : 'cursor-pointer'
                     }`}
                   >
                     {isSaving
@@ -1334,14 +1336,14 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {/* State 1: IDLE - Camera or File Upload Picker */}
                 {ocrState === 'idle' && (
                   <div className="space-y-4 text-center">
-                    <div className="w-16 h-16 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-800 flex items-center justify-center mx-auto">
-                      <Camera className="w-8 h-8 text-emerald-700" />
+                    <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-center justify-center mx-auto">
+                      <Camera className="w-8 h-8 text-emerald-700 dark:text-emerald-400" />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-sm font-bold text-slate-900">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {language === 'hi' ? 'हाथ से लिखे पर्चे या बही-खाते की फोटो लें' : 'Photograph Handwritten Paper Chit or Ledger'}
                       </p>
-                      <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
                         {language === 'hi'
                           ? 'दुकानदार या कारीगर की कच्ची पर्ची, उधारी नोट, या बही-खाता पन्ना'
                           : 'Take a clear photo of torn paper chits, raw receipts, or bahi-khata ledger pages'}
@@ -1349,12 +1351,12 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                     </div>
 
                     {/* Safety & Domain Guidance Banner */}
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 text-left space-y-1.5">
-                      <div className="flex items-center gap-1.5 font-bold text-emerald-950">
-                        <Sparkles className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-xs text-emerald-900 dark:text-emerald-200 text-left space-y-1.5">
+                      <div className="flex items-center gap-1.5 font-bold text-emerald-950 dark:text-emerald-100">
+                        <Sparkles className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
                         <span>{language === 'hi' ? 'व्यावसायिक दस्तावेज स्कैनिंग:' : 'Business Document Scanning:'}</span>
                       </div>
-                      <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
                         {language === 'hi'
                           ? 'यह सुविधा केवल व्यावसायिक पर्चियों, बिलों व बही-खातों के लिए है। कृपया आधार, पैन या व्यक्तिगत पहचान पत्र अपलोड न करें।'
                           : 'Designed strictly for business chits, receipts, and bahi-khata ledgers. Please do NOT upload Aadhaar, PAN, or personal identity documents.'}
@@ -1366,7 +1368,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                       <button
                         type="button"
                         onClick={() => cameraInputRef.current?.click()}
-                        className="min-h-[52px] flex items-center justify-center gap-2 py-3 px-3 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-md hover:bg-emerald-800 active:scale-[0.98] transition-all cursor-pointer"
+                        className="min-h-[52px] flex items-center justify-center gap-2 py-3 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold text-xs shadow-md active:scale-[0.98] transition-all cursor-pointer"
                       >
                         <Camera className="w-4 h-4" />
                         <span>{language === 'hi' ? 'कैमरा चालू करें' : 'Take Photo'}</span>
@@ -1374,9 +1376,9 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="min-h-[52px] flex items-center justify-center gap-2 py-3 px-3 rounded-xl border border-slate-300 bg-white text-slate-800 font-bold text-xs hover:bg-slate-50 active:scale-[0.98] transition-all cursor-pointer"
+                        className="min-h-[52px] flex items-center justify-center gap-2 py-3 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-750 active:scale-[0.98] transition-all cursor-pointer"
                       >
-                        <Upload className="w-4 h-4 text-slate-600" />
+                        <Upload className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                         <span>{language === 'hi' ? 'गैलरी से चुनें' : 'Upload File'}</span>
                       </button>
                     </div>
@@ -1386,23 +1388,23 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {/* State 2: IMAGE SELECTED - Preview Before Upload */}
                 {ocrState === 'image_selected' && ocrImagePreview && (
                   <div className="space-y-4">
-                    <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 max-h-60 flex items-center justify-center">
+                    <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 max-h-60 flex items-center justify-center">
                       <img
                         src={ocrImagePreview}
                         alt="Selected paper slip preview"
                         className="max-h-60 w-full object-contain"
                       />
                     </div>
-                    <div className="flex items-center justify-between text-xs text-slate-600 px-1">
+                    <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 px-1">
                       <span className="font-medium truncate max-w-[200px]">
                         {ocrImageFile?.name || 'document_photo.jpg'}
                       </span>
-                      <span className="text-slate-400">
+                      <span className="text-slate-400 dark:text-slate-500">
                         {ocrImageFile ? `${Math.round(ocrImageFile.size / 1024)} KB` : ''}
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-500 text-center">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
                       {language === 'hi'
                         ? 'जेमिनी विज़न एआई इस पर्चे से सभी वित्तीय लेनदेन को पढ़ेगा।'
                         : 'Gemini Vision AI will extract transaction line items from this document.'}
@@ -1417,14 +1419,14 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                           setOcrImagePreview(null);
                           setOcrImageBase64(null);
                         }}
-                        className="min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                        className="min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? '← फोटो बदलें' : '← Retake Photo'}
                       </button>
                       <button
                         type="button"
                         onClick={handleExecuteOcrScan}
-                        className="min-h-[46px] flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-md hover:bg-emerald-800 transition-colors cursor-pointer"
+                        className="min-h-[46px] flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
                       >
                         <Sparkles className="w-4 h-4 text-emerald-200" />
                         <span>{language === 'hi' ? 'AI से स्कैन करें ✨' : 'Scan with AI ✨'}</span>
@@ -1437,16 +1439,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {ocrState === 'processing' && (
                   <div className="py-8 text-center space-y-4">
                     <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
-                      <div className="absolute inset-0 rounded-full bg-emerald-100 animate-ping opacity-50" />
+                      <div className="absolute inset-0 rounded-full bg-emerald-100 dark:bg-emerald-950/60 animate-ping opacity-50" />
                       <div className="relative w-16 h-16 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg">
                         <Sparkles className="w-8 h-8 animate-pulse text-emerald-200" />
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-sm font-bold text-slate-900">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {language === 'hi' ? 'पर्चे की स्कैनिंग जारी है...' : 'Scanning document with Gemini Vision...'}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         {language === 'hi'
                           ? 'AI हस्तलिखित प्रविष्टियों और राशियों की पहचान कर रहा है...'
                           : 'AI is extracting handwritten ledger line items, parties, and amounts...'}
@@ -1458,12 +1460,12 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {/* State 4: ERROR */}
                 {ocrState === 'error' && (
                   <div className="space-y-4">
-                    <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-2 text-rose-900">
-                      <div className="flex items-center gap-2 font-bold text-sm text-rose-950">
-                        <AlertCircle className="w-5 h-5 text-rose-700 shrink-0" />
+                    <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl space-y-2 text-rose-900 dark:text-rose-200">
+                      <div className="flex items-center gap-2 font-bold text-sm text-rose-950 dark:text-rose-100">
+                        <AlertCircle className="w-5 h-5 text-rose-700 dark:text-rose-400 shrink-0" />
                         <span>{language === 'hi' ? 'स्कैनिंग में समस्या' : 'OCR Scan Failed'}</span>
                       </div>
-                      <p className="text-xs text-rose-800 leading-relaxed">
+                      <p className="text-xs text-rose-800 dark:text-rose-200 leading-relaxed">
                         {ocrError || (language === 'hi' ? 'तस्वीर को पढ़ा नहीं जा सका। कृपया पुनः प्रयास करें।' : 'Could not read image.')}
                       </p>
                     </div>
@@ -1477,7 +1479,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                           setOcrImageBase64(null);
                           setOcrError(null);
                         }}
-                        className="min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                        className="min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? '↺ दूसरी फोटो लें' : '↺ Try Another Photo'}
                       </button>
@@ -1487,7 +1489,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                           resetManualForm();
                           setActiveModal('manual');
                         }}
-                        className="min-h-[46px] py-2.5 px-3 rounded-xl bg-blue-900 text-white font-bold text-xs shadow-md hover:bg-blue-800 transition-colors cursor-pointer"
+                        className="min-h-[46px] py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? 'हाथ से लिखें →' : 'Enter Manually →'}
                       </button>
@@ -1498,19 +1500,19 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {/* State 4.5: QUEUED OFFLINE */}
                 {ocrState === 'queued_offline' && (
                   <div className="space-y-4 py-3 text-center">
-                    <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto shadow-inner">
-                      <CloudOff className="w-8 h-8 text-amber-700" />
+                    <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 flex items-center justify-center mx-auto shadow-inner">
+                      <CloudOff className="w-8 h-8 text-amber-700 dark:text-amber-400" />
                     </div>
                     <div className="space-y-1.5">
-                      <h4 className="text-sm font-bold text-slate-900">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {language === 'hi' ? 'पर्ची ऑफ़लाइन सहेजी गई' : 'Chit Saved Offline'}
                       </h4>
-                      <p className="text-xs text-amber-900 font-semibold bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                      <p className="text-xs text-amber-900 dark:text-amber-200 font-semibold bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-2.5">
                         {language === 'hi'
                           ? 'ऑफ़लाइन सहेजा गया। आपके वापस ऑनलाइन होने पर यह प्रोसेस होगा।'
                           : "Saved offline. Will process when you're back online."}
                       </p>
-                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                         {language === 'hi'
                           ? 'सुरक्षा नियम: ऑनलाइन होने पर AI सुझाव पहले समीक्षा के लिए दिखाए जाएंगे। बिना पुष्टि के कोई प्रविष्टि बही-खाता में नहीं जुड़ेगी।'
                           : 'Safety invariant: AI suggestions will be surfaced for review when connectivity returns. Nothing is added to the ledger without your explicit confirmation.'}
@@ -1521,7 +1523,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                       <button
                         type="button"
                         onClick={resetManualForm}
-                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-blue-900 text-white font-bold text-xs shadow-md hover:bg-blue-800 transition-colors cursor-pointer"
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? 'ठीक है (Done)' : 'Done'}
                       </button>
@@ -1532,7 +1534,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                           setActiveModal('manual');
                           setStep('input');
                         }}
-                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                        className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors cursor-pointer"
                       >
                         {language === 'hi' ? 'हाथ से लिखें' : 'Enter Manually'}
                       </button>
@@ -1544,19 +1546,19 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 {ocrState === 'extracted' && (
                   <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-0.5">
                     {/* Banner with Count & Instructions */}
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                          <Sparkles className="w-4 h-4 text-amber-700" />
+                        <span className="text-xs font-bold text-amber-950 dark:text-amber-100 flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-amber-700 dark:text-amber-400" />
                           {language === 'hi'
                             ? `AI द्वारा पहचाने गए लेनदेन (${ocrTransactions.length})`
                             : `AI Extracted Transactions (${ocrTransactions.length})`}
                         </span>
-                        <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                        <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200">
                           {language === 'hi' ? 'सत्यापन आवश्यक' : 'Review Needed'}
                         </span>
                       </div>
-                      <p className="text-[11px] text-amber-800">
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300">
                         {language === 'hi'
                           ? 'कृपया प्रत्येक लेनदेन की राशि, पार्टी और श्रेणी की पुष्टि करें।'
                           : 'Please verify amounts, party names, and categories before adding to the ledger.'}
@@ -1565,11 +1567,11 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
                     {/* Optional raw text toggle/display */}
                     {ocrRawText && (
-                      <details className="text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                        <summary className="font-medium cursor-pointer text-slate-700">
+                      <details className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <summary className="font-medium cursor-pointer text-slate-700 dark:text-slate-300">
                           {language === 'hi' ? 'पहचाना गया मूल टेक्स्ट देखें' : 'View Detected Raw Text'}
                         </summary>
-                        <p className="mt-2 text-[11px] font-mono text-slate-600 whitespace-pre-wrap">{ocrRawText}</p>
+                        <p className="mt-2 text-[11px] font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{ocrRawText}</p>
                       </details>
                     )}
 
@@ -1581,15 +1583,15 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                         return (
                           <div
                             key={tx.id}
-                            className="bg-white border border-slate-200 rounded-xl p-3 space-y-3 shadow-2xs hover:border-slate-300 transition-colors"
+                            className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-3 shadow-2xs hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
                           >
                             {/* Card Header */}
-                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-700/60">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-bold text-slate-800">
+                                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                                   {language === 'hi' ? `प्रविष्टि #${idx + 1}` : `Entry #${idx + 1}`}
                                 </span>
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">
                                   AI Suggestion
                                 </span>
                               </div>
@@ -1597,7 +1599,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveOcrTx(tx.id)}
-                                  className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  className="p-1 rounded text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
                                   title={language === 'hi' ? 'यह प्रविष्टि हटाएं' : 'Remove this entry'}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -1606,14 +1608,14 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                             </div>
 
                             {/* Credit / Debit Toggle */}
-                            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-lg">
+                            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-lg">
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOcrTxField(tx.id, 'tx_type', 'credit')}
                                 className={`py-1.5 px-2 rounded-md font-bold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
                                   isCredit
                                     ? 'bg-emerald-700 text-white shadow-xs'
-                                    : 'text-slate-600 hover:text-slate-900'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                                 }`}
                               >
                                 <ArrowUpRight className="w-3.5 h-3.5" />
@@ -1625,7 +1627,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                                 className={`py-1.5 px-2 rounded-md font-bold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
                                   !isCredit
                                     ? 'bg-rose-700 text-white shadow-xs'
-                                    : 'text-slate-600 hover:text-slate-900'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                                 }`}
                               >
                                 <ArrowDownRight className="w-3.5 h-3.5" />
@@ -1636,7 +1638,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                             {/* Amount and Category Grid */}
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                   {language === 'hi' ? 'राशि (Amount)' : 'Amount (₹)'}
                                 </label>
                                 <div className="relative">
@@ -1649,19 +1651,19 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                                     value={tx.amount}
                                     onChange={(e) => handleUpdateOcrTxField(tx.id, 'amount', e.target.value)}
                                     placeholder="0.00"
-                                    className="w-full pl-6 pr-2 py-1.5 text-xs font-bold rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                                    className="w-full pl-6 pr-2 py-1.5 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-600"
                                   />
                                 </div>
                               </div>
 
                               <div>
-                                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                   {language === 'hi' ? 'श्रेणी (Category)' : 'Category'}
                                 </label>
                                 <select
                                   value={tx.category}
                                   onChange={(e) => handleUpdateOcrTxField(tx.id, 'category', e.target.value as TransactionCategory)}
-                                  className="w-full py-1.5 px-2 text-xs rounded-lg border border-slate-300 bg-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                                  className="w-full py-1.5 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:ring-1 focus:ring-emerald-600"
                                 >
                                   {TRANSACTION_CATEGORIES.map((cat) => (
                                     <option key={cat.value} value={cat.value}>
@@ -1670,7 +1672,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                                   ))}
                                 </select>
                                 {getCategoryInfo(tx.category)?.helperEn && (
-                                  <p className="text-[10px] text-slate-500 mt-0.5">
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                                     {language === 'hi' ? getCategoryInfo(tx.category)?.helperHi : getCategoryInfo(tx.category)?.helperEn}
                                   </p>
                                 )}
@@ -1679,20 +1681,20 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
                             {/* Date */}
                             <div>
-                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                 {language === 'hi' ? 'तारीख (Date)' : 'Date'}
                               </label>
                               <input
                                 type="date"
                                 value={tx.date}
                                 onChange={(e) => handleUpdateOcrTxField(tx.id, 'date', e.target.value)}
-                                className="w-full py-1.5 px-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                                className="w-full py-1.5 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-600"
                               />
                             </div>
 
                             {/* Party Name */}
                             <div>
-                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                 {language === 'hi' ? 'ग्राहक / पार्टी' : 'Party / Customer'}
                               </label>
                               <input
@@ -1700,13 +1702,13 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                                 value={tx.party_name}
                                 onChange={(e) => handleUpdateOcrTxField(tx.id, 'party_name', e.target.value)}
                                 placeholder={language === 'hi' ? 'पार्टी का नाम' : 'Party name'}
-                                className="w-full py-1.5 px-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                                className="w-full py-1.5 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-600"
                               />
                             </div>
 
                             {/* Item Description */}
                             <div>
-                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                 {language === 'hi' ? 'सामान / कार्य विवरण' : 'Item / Description'}
                               </label>
                               <input
@@ -1714,13 +1716,13 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                                 value={tx.item}
                                 onChange={(e) => handleUpdateOcrTxField(tx.id, 'item', e.target.value)}
                                 placeholder={language === 'hi' ? 'सामान का विवरण' : 'Item description'}
-                                className="w-full py-1.5 px-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                                className="w-full py-1.5 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-600"
                               />
                             </div>
 
                             {/* Card Error if any */}
                             {tx.error && (
-                              <p className="text-[11px] text-rose-600 font-semibold">{tx.error}</p>
+                              <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{tx.error}</p>
                             )}
                           </div>
                         );
@@ -1729,14 +1731,14 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
                     {/* Global OCR form error if validation fails */}
                     {formError && (
-                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 font-medium">
+                      <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300 font-medium">
                         {formError}
                       </div>
                     )}
 
                     {/* Accounting Assurance Note */}
-                    <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                    <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-indigo-700 dark:text-indigo-400 shrink-0 mt-0.5" />
                       <p className="text-[11px]">
                         {language === 'hi'
                           ? 'पुष्टि करने पर ये सभी लेनदेन बही-खाते में जुड़ेंगे और वित्तीय इंजन तुरंत टर्नओवर व बैंक साख का पुनर्गणन करेगा।'
@@ -1756,8 +1758,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                           setOcrImageBase64(null);
                           setOcrTransactions([]);
                         }}
-                        className={`min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold text-xs transition-colors ${
-                          isSaving ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer'
+                        className={`min-h-[46px] py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors ${
+                          isSaving ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-750 cursor-pointer'
                         }`}
                       >
                         {language === 'hi' ? '← नई तस्वीर लें' : '← Retake Photo'}
@@ -1766,8 +1768,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                         type="button"
                         disabled={isSaving}
                         onClick={handleConfirmAllOcrTransactions}
-                        className={`min-h-[46px] py-2.5 px-3 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600 ${
-                          isSaving ? 'opacity-60 cursor-not-allowed bg-emerald-800' : 'hover:bg-emerald-800 cursor-pointer'
+                        className={`min-h-[46px] py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600 ${
+                          isSaving ? 'opacity-60 cursor-not-allowed bg-emerald-800' : 'cursor-pointer'
                         }`}
                       >
                         {isSaving

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, RefreshCw, Sparkles, WifiOff } from 'lucide-react';
 import { BottomNav } from './components/BottomNav';
 import { Navbar } from './components/Navbar';
+import { ThemeProvider } from './context/ThemeContext';
 import { useMediaSyncQueue } from './hooks/useMediaSyncQueue';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import {
@@ -10,10 +11,12 @@ import {
   deleteTransaction,
   generateTransactionId,
   initializeLedger,
+  updateTransaction,
 } from './lib/ledgerStorage';
 import { DEMO_FINANCIAL_SUMMARY, DEMO_PROFILE, DEMO_TRANSACTIONS } from './lib/mockData';
 import { AppraisalPage } from './pages/AppraisalPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { LandingPage } from './pages/LandingPage';
 import { LedgerPage } from './pages/LedgerPage';
 import { SchemesPage } from './pages/SchemesPage';
 import {
@@ -31,9 +34,45 @@ import type {
   Transaction,
 } from './types';
 
-export function App() {
+function AppContent() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [language, setLanguage] = useState<'en' | 'hi'>('en');
+
+  // View state: 'landing' (public utility entry page) vs 'app' (main workspace)
+  const [currentView, setCurrentView] = useState<'landing' | 'app'>(() => {
+    if (typeof window !== 'undefined' && window.location.hash.startsWith('#app')) {
+      return 'app';
+    }
+    return 'landing';
+  });
+
+  // Keep window hash and browser back/forward buttons synchronized
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash.startsWith('#app')) {
+        setCurrentView('app');
+      } else {
+        setCurrentView('landing');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const handleOpenApp = () => {
+    setCurrentView('app');
+    setActiveTab('dashboard');
+    if (typeof window !== 'undefined') {
+      window.location.hash = '#app';
+    }
+  };
+
+  const handleOpenLanding = () => {
+    setCurrentView('landing');
+    if (typeof window !== 'undefined') {
+      window.location.hash = '';
+    }
+  };
 
   // Real browser connectivity state - strictly based on navigator.onLine & window events
   const isOnline = useOnlineStatus();
@@ -253,6 +292,27 @@ export function App() {
     });
   };
 
+  // Handle manual / dialog update of an existing confirmed transaction
+  const handleUpdateTransaction = async (updatedTx: Transaction) => {
+    try {
+      // 1. Write update to IndexedDB first
+      await updateTransaction(updatedTx);
+      setPersistenceError(null);
+    } catch (err: unknown) {
+      console.error('Failed to update transaction:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to update transaction locally';
+      setPersistenceError(msg);
+      throw err;
+    }
+
+    // 2. Update React state cleanly & trigger recalculation
+    setTransactions((prev) => {
+      const updated = prev.map((tx) => (tx.id === updatedTx.id ? updatedTx : tx));
+      fetchBackendCalculation(updated);
+      return updated;
+    });
+  };
+
   // Explicit user action to view offline demo numbers when backend is unreachable
   const handleUseDemoFallback = () => {
     setFinancialSummary(DEMO_FINANCIAL_SUMMARY);
@@ -261,17 +321,33 @@ export function App() {
     setErrorMessage(null);
   };
 
-  // App startup loading screen
+  // 1. Public Landing Page View (accessible before entering workspace)
+  if (currentView === 'landing') {
+    return (
+      <LandingPage
+        language={language}
+        onLanguageToggle={toggleLanguage}
+        onOpenApp={handleOpenApp}
+      />
+    );
+  }
+
+  // 2. App startup loading screen when inside workspace
   if (isLedgerLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-        <Navbar currentLanguage={language} onLanguageToggle={toggleLanguage} isOnline={isOnline} />
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-150">
+        <Navbar
+          currentLanguage={language}
+          onLanguageToggle={toggleLanguage}
+          isOnline={isOnline}
+          onOpenLanding={handleOpenLanding}
+        />
         <main className="flex-1 w-full max-w-lg md:max-w-2xl mx-auto px-3.5 sm:px-6 py-16 flex flex-col items-center justify-center text-center">
-          <div className="w-10 h-10 border-3 border-blue-900 border-t-transparent rounded-full animate-spin mb-4" />
-          <p className="text-sm font-bold text-slate-800">
+          <div className="w-10 h-10 border-3 border-indigo-600 dark:border-indigo-400 border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
             {language === 'hi' ? 'बही-खाता लोड हो रहा है...' : 'Loading ledger...'}
           </p>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {language === 'hi' ? 'स्थानीय सुरक्षित स्टोरेज से डेटा पढ़ा जा रहा है' : 'Reading data from local storage'}
           </p>
         </main>
@@ -280,7 +356,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-150">
       {/* Top Application Bar */}
       <Navbar
         currentLanguage={language}
@@ -288,6 +364,7 @@ export function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         isOnline={isOnline}
+        onOpenLanding={handleOpenLanding}
       />
 
       {/* Main Responsive Content Container */}
@@ -297,10 +374,10 @@ export function App() {
           <div
             role="status"
             aria-live="polite"
-            className="mb-3 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between gap-2 shadow-2xs"
+            className="mb-3 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2 shadow-2xs"
           >
             <div className="flex items-center gap-2">
-              <WifiOff className="w-4 h-4 text-amber-700 shrink-0" aria-hidden="true" />
+              <WifiOff className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" aria-hidden="true" />
               <span>
                 <strong className="font-bold">
                   {language === 'hi' ? 'ऑफ़लाइन मोड:' : 'Offline Mode:'}
@@ -310,21 +387,22 @@ export function App() {
                   : 'You are currently offline. Transactions and calculations operate locally.'}
               </span>
             </div>
-            <span className="text-[11px] font-bold text-amber-800 bg-amber-200/70 px-2 py-0.5 rounded-md shrink-0">
+            <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-200/70 dark:bg-amber-900/60 px-2 py-0.5 rounded-md shrink-0">
               {language === 'hi' ? 'ऑफ़लाइन' : 'Offline'}
             </span>
           </div>
         )}
+
         {/* Persistence Error Alert (if IndexedDB write failed) */}
         {persistenceError && (
-          <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start justify-between gap-2">
+          <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-start justify-between gap-2">
             <div>
               <p className="font-bold">{language === 'hi' ? 'स्थानीय स्टोरेज सूचना' : 'Storage Notice'}</p>
               <p className="mt-0.5">{persistenceError}</p>
             </div>
             <button
               onClick={() => setPersistenceError(null)}
-              className="text-amber-700 hover:text-amber-900 font-bold px-1 cursor-pointer"
+              className="text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 font-bold px-1 cursor-pointer"
               aria-label="Dismiss"
             >
               ✕
@@ -334,8 +412,8 @@ export function App() {
 
         {/* Offline Queue Processing / Sync Indicator */}
         {isSyncing && (
-          <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-center gap-2">
-            <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
+          <div className="mb-3 px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-xl text-xs text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600 dark:text-indigo-400 shrink-0" />
             <span className="font-medium">
               {language === 'hi'
                 ? 'ऑफ़लाइन प्रविष्टियों का AI विश्लेषण जारी है...'
@@ -346,9 +424,9 @@ export function App() {
 
         {/* Failed items notice with retry */}
         {queueCounts.failedCount > 0 && !isSyncing && (
-          <div className="mb-3 px-3 py-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-center justify-between gap-2">
+          <div className="mb-3 px-3 py-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-900 dark:text-rose-200 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
               <span>
                 {language === 'hi'
                   ? `${queueCounts.failedCount} ऑफ़लाइन प्रविष्टि प्रोसेस नहीं हो सकी।`
@@ -367,19 +445,19 @@ export function App() {
 
         {/* Persistent Ready For Review Banner */}
         {readyItems.length > 0 && !activeReviewItem && (
-          <div className="mb-3.5 p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl shadow-xs">
+          <div className="mb-3.5 p-3.5 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/80 rounded-2xl shadow-xs">
             <div className="flex items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <div className="w-8 h-8 rounded-full bg-amber-500 dark:bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-amber-950 truncate">
+                  <h4 className="text-xs font-bold text-amber-950 dark:text-amber-100 truncate">
                     {language === 'hi'
                       ? `${readyItems.length} ऑफ़लाइन प्रविष्टि समीक्षा के लिए तैयार`
                       : `${readyItems.length} Offline ${readyItems.length === 1 ? 'Entry' : 'Entries'} Ready for Review`}
                   </h4>
-                  <p className="text-[11px] text-amber-900/80 leading-tight mt-0.5">
+                  <p className="text-[11px] text-amber-900/80 dark:text-amber-300/80 leading-tight mt-0.5">
                     {language === 'hi'
                       ? 'AI द्वारा तैयार — बही-खाता में जोड़ने हेतु पुष्टि आवश्यक है'
                       : 'AI extraction ready — Human verification mandatory'}
@@ -414,6 +492,7 @@ export function App() {
             transactions={transactions}
             onAddTransaction={handleAddTransaction}
             onAddTransactions={handleAddTransactions}
+            onUpdateTransaction={handleUpdateTransaction}
             onDeleteTransaction={handleDeleteTransaction}
             language={language}
             activeReviewItem={activeReviewItem}
@@ -428,6 +507,7 @@ export function App() {
             transactions={transactions}
             onAddTransaction={handleAddTransaction}
             onAddTransactions={handleAddTransactions}
+            onUpdateTransaction={handleUpdateTransaction}
             onDeleteTransaction={handleDeleteTransaction}
             language={language}
             activeReviewItem={activeReviewItem}
@@ -457,6 +537,14 @@ export function App() {
       {/* Mobile-First Bottom Navigation */}
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} language={language} />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
   );
 }
 

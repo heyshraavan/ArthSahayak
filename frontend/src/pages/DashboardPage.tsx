@@ -23,6 +23,7 @@ interface DashboardPageProps {
   transactions: Transaction[];
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void> | void;
   onAddTransactions?: (txs: Omit<Transaction, 'id'>[]) => Promise<void> | void;
+  onUpdateTransaction?: (tx: Transaction) => Promise<void> | void;
   onDeleteTransaction?: (id: string) => Promise<void> | void;
   language: 'en' | 'hi';
   activeReviewItem?: QueuedMediaItem | null;
@@ -42,6 +43,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   transactions,
   onAddTransaction,
   onAddTransactions,
+  onUpdateTransaction,
   onDeleteTransaction,
   language,
   activeReviewItem,
@@ -51,33 +53,34 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 }) => {
   return (
     <div className="space-y-4">
-      {/* Welcome & Profile Summary Card */}
+      {/* Welcome & Profile Summary Card (Solid UX4G-inspired structure, minimal gradient) */}
       <section
-        className="bg-linear-to-r from-blue-900 to-blue-950 text-white rounded-2xl p-4 shadow-sm"
+        className="bg-slate-900 dark:bg-slate-900 text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-xs transition-colors"
         aria-labelledby="user-welcome-heading"
       >
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs text-blue-200 font-medium">
+            <p className="text-xs text-indigo-300 dark:text-indigo-400 font-semibold tracking-wide uppercase">
               {language === 'hi' ? 'नमस्ते / स्वागत है' : 'Welcome back,'}
             </p>
-            <h1 id="user-welcome-heading" className="text-xl font-bold tracking-tight mt-0.5">
+            <h1 id="user-welcome-heading" className="text-xl sm:text-2xl font-bold tracking-tight text-white mt-1">
               {profile.name}
             </h1>
-            <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-blue-200">
-              <span className="inline-flex items-center gap-1 bg-blue-800/80 px-2 py-0.5 rounded-md">
-                <Briefcase className="w-3 h-3" />
-                {profile.trade}
+            <div className="flex flex-wrap items-center gap-2 mt-2.5 text-xs text-slate-300">
+              <span className="inline-flex items-center gap-1.5 bg-slate-800/90 text-slate-200 border border-slate-700/60 px-2.5 py-1 rounded-md font-medium">
+                <Briefcase className="w-3.5 h-3.5 text-indigo-400" aria-hidden="true" />
+                <span>{profile.trade}</span>
               </span>
-              <span className="inline-flex items-center gap-1 bg-blue-800/80 px-2 py-0.5 rounded-md">
-                <MapPin className="w-3 h-3" />
-                {profile.location}
+              <span className="inline-flex items-center gap-1.5 bg-slate-800/90 text-slate-200 border border-slate-700/60 px-2.5 py-1 rounded-md font-medium">
+                <MapPin className="w-3.5 h-3.5 text-indigo-400" aria-hidden="true" />
+                <span>{profile.location}</span>
               </span>
             </div>
           </div>
-          <div className="text-right">
-            <span className="inline-block text-[10px] font-bold uppercase tracking-wider bg-emerald-700 text-emerald-100 px-2 py-0.5 rounded-full">
-              {language === 'hi' ? 'सक्रिय खाता' : 'Active'}
+          <div className="text-right shrink-0">
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-800/70 px-2.5 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{language === 'hi' ? 'सक्रिय उद्यम' : 'Active Enterprise'}</span>
             </span>
           </div>
         </div>
@@ -113,6 +116,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <RecentTransactions
             transactions={transactions}
             language={language}
+            onUpdateTransaction={onUpdateTransaction}
             onDeleteTransaction={onDeleteTransaction}
           />
         </div>
